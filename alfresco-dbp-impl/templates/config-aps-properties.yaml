@@ -1,0 +1,188 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  # the name of the config map
+  name: {{ .Release.Name }}-aps-properties
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    component: aps
+data:
+  activiti-app.properties: |+
+    {{- if .Values.activitiAppProperties.enabled }}
+    {{- range $key, $val := .Values.activitiAppProperties }}
+    {{ $key }}={{ $val }}
+    {{- end }}
+    {{- end }}
+  activiti-ldap.properties: |+
+    {{- if .Values.ldapconfig.enabled }}
+    # --------------------------
+    # LDAP AUTHENTICATION CONFIG
+    # --------------------------
+
+    # Note that this is AUTHENTICATION only, not synchronization.
+    # For this to work properly, the LDAP synchronization (see below), needs to be
+    # enabled and configured correctly (on one node).
+    # Authentication will be through Identity Service 
+
+    ldap.authentication.enabled=false
+
+    # Set to false to allow for case insensitive logins. By default true if omitted or commented out.
+    #ldap.authentication.casesensitive=true
+
+    # Set this property to 'true' to allow for a fallback to database authentication (default is false).
+    # This can be useful to have a 'system' user for example which does not represent
+    # a real user (and is not in the LDAP user store), but can be used to eg. call the REST API.
+    ldap.allow.database.authentication.fallback=false
+
+
+    # ----------------------------
+    # LDAP SYNCHRONIZATION CONFIG
+    # ----------------------------
+
+    # Enables full synchronization. With full sync, all user/groups will be checked whether they are valid or not.
+    # By default, runs at midnight, since this is quite a heavy operation.
+    # Full synchronization is needed because a partial synchronization cannot detect deletes of groups/users.
+    ldap.synchronization.full.enabled={{ .Values.ldapconfig.synchronization.full.enabled }}
+    ldap.synchronization.full.cronExpression={{ .Values.ldapconfig.synchronization.full.cronExpression }}
+
+    # Enabled differential synchronization. This will only check the users/groups which are changes since last sync.
+    # A differential sync cannot detect deletes of users/groups. This is done by the full sync.
+    ldap.synchronization.differential.enabled={{ .Values.ldapconfig.synchronization.differential.enabled }}
+    ldap.synchronization.differential.cronExpression={{ .Values.ldapconfig.synchronization.differential.cronExpression }}
+
+
+    # ----------------------
+    # LDAP CONNECTION CONFIG
+    # ----------------------
+
+    # The URL to connect to the LDAP server
+    ldap.authentication.java.naming.provider.url={{ .Values.ldapconfig.url }}
+
+    # The default principal to use (only used for LDAP sync)
+    ldap.synchronization.java.naming.security.principal={{ .Values.ldapconfig.principal }}
+
+    # The password for the default principal (only used for LDAP sync)
+    ldap.synchronization.java.naming.security.credentials={{ .Values.ldapconfig.credentials }}
+
+    # The authentication mechanism to use for synchronization
+    ldap.synchronization.java.naming.security.authentication={{ .Values.ldapconfig.authentication }}
+
+    # LDAPS truststore configuration properties
+    #ldap.authentication.truststore.path=/opt/alfresco/acs-6/alf_data/keystore/ldap.keystore
+    #ldap.authentication.truststore.passphrase=hitss-alfrezco-2017
+    #ldap.authentication.truststore.type=JCEKS
+    # Set to 'ssl' to enable truststore configuration via subsystem's properties
+    ldap.authentication.java.naming.security.protocol={{ .Values.ldapconfig.protocol }}
+
+    # The LDAP context factory to use
+    ldap.authentication.java.naming.factory.initial={{ .Values.ldapconfig.namingFactory }}
+
+    # Requests timeout, in miliseconds, use 0 for none (default)
+    #ldap.authentication.java.naming.read.timeout=0
+
+    # See http://docs.oracle.com/javase/jndi/tutorial/ldap/referral/jndi.html
+    ldap.synchronization.java.naming.referral={{ .Values.ldapconfig.referral }}
+
+
+
+    # -----------
+    # USER CONFIG
+    # -----------
+
+    # The user search base restricts the LDAP user query to a sub section of tree on the LDAP server.
+    ldap.synchronization.userSearchBase={{ .Values.ldapconfig.userSearchBase }}
+
+    # The query to select all objects that represent the users to import.
+    # Active Directory example: (&(objectclass\=user)(userAccountControl\:1.2.840.113556.1.4.803\:\=512))
+    ldap.synchronization.personQuery={{ .Values.ldapconfig.personQuery }}
+
+
+    # The query to select objects that represent the users to import that have changed since a certain time.
+    # Active Directory example: (&(objectclass\=user)(userAccountControl\:1.2.840.113556.1.4.803\:\=512)(!(whenChanged<\={0})))
+
+    ldap.synchronization.personDifferentialQuery={{ .Values.ldapconfig.personDifferentialQuery }}
+
+    # The attribute name on people objects found in LDAP to use as the login id in Activiti. Needs to be unique and cannot change!
+    ldap.synchronization.userIdAttributeName={{ .Values.ldapconfig.userIdAttributeName }}
+
+    # The attribute on person objects in LDAP to map to the first name property of a user
+    ldap.synchronization.userFirstNameAttributeName={{ .Values.ldapconfig.userFirstNameAttributeName }}
+
+    # The attribute on person objects in LDAP to map to the last name property of a user
+    ldap.synchronization.userLastNameAttributeName={{ .Values.ldapconfig.userLastNameAttributeName }}
+
+    # The attribute on person objects in LDAP to map to the email property of a user
+    ldap.synchronization.userEmailAttributeName={{ .Values.ldapconfig.userEmailAttributeName }}
+
+    # The person type in LDAP
+    # Active Directory: user
+    ldap.synchronization.userType={{ .Values.ldapconfig.userType }}
+
+    # Set the dn of the people that need to be made tenant admin (one tenant). Delimit multiple entries with ;, cause we can't use a comma of course. Note: no trimming of spaces will be applied
+    ldap.synchronization.tenantAdminDn=
+
+    # Set the dn of the people that need to be made tenant manager (multiple tenants). Delimit multiple entries with ;, cause we can't use a comma of course. Note: no trimming of spaces will be applied
+    #ldap.synchronization.tenantManagerDn={{ .Values.ldapconfig.adminUsers }}
+
+    # ------------
+    # GROUP CONFIG
+    # ------------
+
+    # The group search base restricts the LDAP group query to a sub section of tree on the LDAP server.
+    ldap.synchronization.groupSearchBase={{ .Values.ldapconfig.groupSearchBase }} 
+
+    # The query to select all objects that represent the groups to import.
+    # Active Directory example: (objectclass\=group)
+    ldap.synchronization.groupQuery={{ .Values.ldapconfig.groupQuery }}
+
+    # The query to select objects that represent the groups to import that have changed since a certain time.
+    # Active Directory example: (&(objectclass\=group)(!(whenChanged<\={0})))
+
+    ldap.synchronization.groupDifferentialQuery={{ .Values.ldapconfig.groupDifferentialQuery }}
+
+    # The attribute on LDAP group objects to map to the authority name property in Alfresco
+    #ldap.synchronization.groupIdAttributeName={{ .Values.ldapconfig.groupIdAttributeName }} 
+
+    # The attribute in LDAP on group objects that defines the DN for its members
+    ldap.synchronization.groupMemberAttributeName={{ .Values.ldapconfig.groupMemberAttributeName }}
+
+    # The group type in LDAP
+    # Active Directory: group
+    ldap.synchronization.groupType={{ .Values.ldapconfig.groupType }}
+
+    # The dn of an entry.
+    ldap.synchronization.distinguishedNameAttributeName=dn
+
+    # The name of the operational attribute recording the last update time for a group or user.
+    # Active Directory: whenChanged
+    ldap.synchronization.modifyTimestampAttributeName=modifyTimestamp
+
+    # The name of the operational attribute recording the create time for a group or user.
+    # Active Directory: whenCreated
+    ldap.synchronization.createTimestampAttributeName=createTimestamp
+
+    # The timestamp format. Unfortunately, this varies between directory servers.
+    # Active Directory: yyyyMMddHHmmss'.0Z'
+    ldap.synchronization.timestampFormat=yyyyMMddHHmmss.SSS'Z'
+
+    # The timestamp format locale language. 'en' by default. Follows the java.util.Locale semantics.
+    ldap.synchronization.timestampFormat.locale.language={{ .Values.ldapconfig.language }}
+
+    # The timestamp format locale country. 'GB' by default. Follows the java.util.Locale semantics.
+    ldap.synchronization.timestampFormat.locale.country={{ .Values.ldapconfig.locale }}
+
+    # The timestamp format timezone. 'GMT' by default. Folloez the java.text.SimpleDateFormat semantics.
+    ldap.synchronization.timestampFormat.timezone={{ .Values.ldapconfig.timezone }} 
+    {{- if eq .Values.ldapconfig.protocol "ssl" }}
+    ldap.authentication.truststore.path=/usr/local/tomcat/private/ldap.truststore
+    ldap.authentication.truststore.passphrase={{ .Values.ldapconfig.truststore.passphrase }}
+    ldap.authentication.truststore.type={{ .Values.ldapconfig.truststore.type }}
+    {{- end }}
+    {{- end }}
+  entrypoint.sh: |+
+    #!/bin/sh
+    $HOME/set-activiti-identity-config.sh
+    $CATALINA_HOME/bin/catalina.sh run 
+  ldap.truststore: {{ .Values.ldapconfig.truststore.data | quote }}

@@ -1,0 +1,32 @@
+replicaCount: 1
+
+image:
+  repository: alfresco/alfresco-event-gateway
+  tag: 0.3-SNAPSHOT
+  pullPolicy: Always
+  internalPort: 8080
+service:
+  name: alfresco-event-gateway
+  # If running on AWS choose LoadBalancer as service Type
+  type: NodePort
+  externalPort: 80
+ingress:
+  path: /alfresco-event-gateway
+
+activemq-public:
+  services:
+    broker:
+      type: LoadBalancer
+
+messaging:
+  external:
+    host:
+    port:
+  from:
+    activemq:
+      host:
+      port:
+  to:
+    activemq:
+      host:
+      port:

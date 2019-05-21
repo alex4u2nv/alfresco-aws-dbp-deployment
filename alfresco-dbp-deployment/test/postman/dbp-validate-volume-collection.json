@@ -1,0 +1,204 @@
+{
+	"info": {
+		"_postman_id": "11742db9-bc93-491a-94cb-9600717007a5",
+		"name": "dbp-validate-volume",
+		"description": "This collection will test whether content created is still working when the acs pod is deleted and restarted.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Generate key cloak token",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"id": "a724f187-640e-491d-b331-3bc33ea9e2bf",
+						"type": "text/javascript",
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"var tokens = JSON.parse(responseBody); ",
+							"pm.environment.set(\"kcAccessToken\", tokens.access_token);"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/x-www-form-urlencoded"
+					}
+				],
+				"body": {
+					"mode": "urlencoded",
+					"urlencoded": [
+						{
+							"key": "client_id",
+							"value": "alfresco",
+							"type": "text"
+						},
+						{
+							"key": "grant_type",
+							"value": "password",
+							"type": "text"
+						},
+						{
+							"key": "username",
+							"value": "testuser",
+							"type": "text"
+						},
+						{
+							"key": "password",
+							"value": "password",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{protocol}}://{{identityServiceUrl}}/realms/{{identityServiceRealm}}/protocol/openid-connect/token",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{identityServiceUrl}}"
+					],
+					"path": [
+						"realms",
+						"{{identityServiceRealm}}",
+						"protocol",
+						"openid-connect",
+						"token"
+					]
+				},
+				"description": "Generate key cloak token to be used for volume validation"
+			},
+			"response": []
+		},
+		{
+			"name": "Retrieve test user's files using token",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"id": "432815fa-1072-4abd-b228-9838f38f59c3",
+						"type": "text/javascript",
+						"exec": [
+							"pm.test(\"Status code is 200\", function() {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Correct user id is returned in file list\", function() {",
+							"    var jsonData = pm.response.json();",
+							"    var modulesArray = jsonData.list.source.properties;",
+							"    for (var key in modulesArray) {",
+							"        var obj = modulesArray[key];",
+							"        var id = obj.id;",
+							"        pm.expect(id).to.be.eql(\"testuser\");",
+							"    }",
+							"});",
+							"",
+							"pm.test(\"User can access its files\", function() {",
+							"    var jsonData = pm.response.json();",
+							"    var userName = jsonData.list.entries.properties;",
+							"    for (var key in userName) {",
+							"        var obj = modulesArray[key];",
+							"        var id = obj.name;",
+							"        pm.expect(id).to.be.eql(\"testusertestfile.txt\");",
+							"    }",
+							"});"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{kcAccessToken}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": ""
+				},
+				"url": {
+					"raw": "{{protocol}}://{{acsUrl}}/api/-default-/public/alfresco/versions/1/nodes/-my-/children?includeSource=true",
+					"protocol": "{{protocol}}",
+					"host": [
+						"{{acsUrl}}"
+					],
+					"path": [
+						"api",
+						"-default-",
+						"public",
+						"alfresco",
+						"versions",
+						"1",
+						"nodes",
+						"-my-",
+						"children"
+					],
+					"query": [
+						{
+							"key": "includeSource",
+							"value": "true"
+						}
+					]
+				},
+				"description": "Volume validation: verify user's files are still accessible and metadata corresponds to original user"
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"id": "98c01caa-7468-48ac-825d-d9384fad980f",
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"id": "9ac39787-8c43-484f-99da-88fa41bbda22",
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"id": "c4f67feb-0b18-4080-bb64-414be801b4d9",
+			"key": "acsUrl",
+			"value": "alfresco-cs-repository.{{dbpHostName}}/alfresco",
+			"type": "string"
+		},
+		{
+			"id": "892c6853-a96a-44a6-90e4-4334b38d58e6",
+			"key": "identityServiceUrl",
+			"value": "alfresco-identity-service.{{dbpHostName}}/auth",
+			"type": "string"
+		},
+		{
+			"id": "74fc2df5-7214-44b5-873a-508f7a6084ac",
+			"key": "identityServiceRealm",
+			"value": "alfresco",
+			"type": "string"
+		},
+		{
+			"id": "fc8e1820-bbec-43f6-a5f8-0f99fce02305",
+			"key": "protocol",
+			"value": "https",
+			"type": "string"
+		}
+	]
+}

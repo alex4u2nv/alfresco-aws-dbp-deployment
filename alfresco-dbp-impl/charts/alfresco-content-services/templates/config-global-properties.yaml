@@ -1,0 +1,46 @@
+# Defines the properties for alfresco-global.properties required by the content repository
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  # the name of the config map
+  name: {{ template "content-services.shortname" . }}-global-properties-configmap
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    component: repository
+data:
+  {{ $alfhost := (.Values.externalHost | default (printf "%s-repository" (include "content-services.shortname" .))) }}
+  {{ $alfprotocol := (.Values.externalProtocol | default "http") }}
+  {{ $alfport := (.Values.externalPort | default .Values.repository.service.externalPort) }}
+  alfresco-global.properties: |+
+    alfresco.host={{ $alfhost }}
+    alfresco.protocol={{ $alfprotocol }}
+    alfresco.port={{ $alfport }}
+    dir.license.external=/usr/local/tomcat/shared/classes/alfresco/extension/license/
+    share.protocol={{ .Values.externalProtocol | default "http"}}
+    share.host={{ .Values.externalHost | default (printf "%s-share" (include "content-services.shortname" .)) }}
+    share.port={{ .Values.externalPort | default .Values.share.service.externalPort }}
+    alfresco_user_store.adminpassword={{ .Values.repository.adminPassword | default "209c6174da490caeb422f3fa5a7ae634" }}
+    csrf.filter.origin={{ $alfprotocol }}://{{ $alfhost }}
+    csrf.filter.referer={{ $alfprotocol }}://{{ $alfhost }}/.*
+    solr.host={{ template "alfresco-search.host" . }}
+    solr.port={{ template "alfresco-search.port" . }}
+    alfresco-pdf-renderer.url=http://{{ template "content-services.shortname" . }}-pdfrenderer
+    img.url=http://{{ template "content-services.shortname" . }}-imagemagick
+    jodconverter.url=http://{{ template "content-services.shortname" . }}-libreoffice
+    db.name={{- .Values.database.user }}
+    db.password={{- .Values.database.password }}
+    db.username={{- .Values.database.user }}
+    db.driver={{ .Values.database.driver | default "org.postgresql.Driver" }}
+    tika.url=http://{{ template "content-services.shortname" . }}-tika
+    {{- if .Values.s3connector.enabled }}
+    {{- range $key, $val := .Values.s3connector.config }}
+    s3.{{ $key }}={{ $val }}
+    {{- end }}
+    {{- end }}
+    {{- if eq .Values.database.external false }}
+    db.url=jdbc:postgresql://{{ printf "%s-%s" .Release.Name .Values.postgresql.nameOverride }}:{{ .Values.postgresql.service.port }}/{{ .Values.postgresql.postgresDatabase }}
+    {{- else }}
+    db.url={{ .Values.database.url }}
+    {{- end }}

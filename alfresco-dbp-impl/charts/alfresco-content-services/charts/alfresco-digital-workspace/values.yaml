@@ -1,0 +1,42 @@
+# This is a YAML-formatted file.  Declare variables to be passed into your templates.
+
+replicaCount: 1
+image:
+  repository: quay.io/alfresco/alfresco-digital-workspace
+  tag: "1.0.0"
+  pullPolicy: Always
+  internalPort: 80
+service:
+  name: alfresco
+  type: ClusterIP
+  externalPort: 80
+ingress:
+  path: /digital-workspace
+  maxUploadSize: "5g"
+  applicationBasePath: ./digital-workspace
+resources:
+  requests:
+    memory: "250Mi"
+  limits:
+    memory: "500Mi"
+  # The  readiness probe is used to check startup only as a failure
+  # of the liveness probe later will result in the pod being restarted.
+readinessProbe:
+  initialDelaySeconds: 60
+  periodSeconds: 20
+  timeoutSeconds: 10
+  failureThreshold: 6
+livenessProbe:
+  initialDelaySeconds: 130
+  periodSeconds: 20
+  timeoutSeconds: 10
+
+# choose if you want network policy enabled
+networkpolicysetting:
+  enabled: true
+
+# If you are using a private image, define the registryPullSecrets value
+registryPullSecrets: quay-registry-secret
+
+# # If you are deploying acs on a different path other than root you will need to pass in ACSURL variable
+# ACSURL: https://example.com/acs

@@ -1,0 +1,65 @@
+# Defines the deployment for the alfresco share app
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "content-services.shortname" . }}-share
+  labels:
+    app: {{ template "content-services.shortname" . }}-share
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: share
+spec:
+  replicas: {{ .Values.share.replicaCount }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "content-services.shortname" . }}-share
+        release: {{ .Release.Name }}
+        component: share
+    spec:
+      {{- if .Values.registryPullSecrets }}
+      # only set this secret if a private docker registry variable is defined
+      imagePullSecrets:
+        - name: {{ .Values.registryPullSecrets }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.share.image.repository }}:{{ .Values.share.image.tag }}"
+          command: ["/bin/sh"]
+          args: ["-c", "cp /usr/local/tomcat/startup/startup.sh /usr/local/tomcat/; chmod 755 /usr/local/tomcat/startup.sh;  /usr/local/tomcat/startup.sh; catalina.sh run "]
+          imagePullPolicy: {{ .Values.share.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.share.image.internalPort }}
+          volumeMounts:
+          - name: startup
+            mountPath: /usr/local/tomcat/startup
+            readOnly: false
+          resources:
+{{ toYaml .Values.share.resources | indent 12 }}
+          envFrom:
+          - configMapRef:
+              name: {{ template "content-services.shortname" . }}-share-configmap
+          readinessProbe:
+            httpGet:
+              path: /share
+              port: {{ .Values.share.image.internalPort }}
+            initialDelaySeconds: {{ .Values.share.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.share.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.share.readinessProbe.timeoutSeconds }}
+          livenessProbe:
+            httpGet:
+              path: /share
+              port: {{ .Values.share.image.internalPort }}
+            initialDelaySeconds: {{ .Values.share.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.share.livenessProbe.periodSeconds }}
+            failureThreshold: 1
+            timeoutSeconds: {{ .Values.share.livenessProbe.timeoutSeconds }}
+      volumes:
+      - name: startup
+        configMap:
+          name: {{ .Release.Name }}-startup-share
+      initContainers:
+        - name: acs-init
+          image: radial/busyboxplus:curl
+          command: ["sh", '-c', 'until $(curl --output /dev/null --silent  --fail  http://dbp-deploy-alfresco-cs-repository:80/alfresco/api/-default-/public/alfresco/versions/1/probes/-ready- --connect-timeout 1 --max-time 2); do echo waiting for acs; sleep 2 ; done;']

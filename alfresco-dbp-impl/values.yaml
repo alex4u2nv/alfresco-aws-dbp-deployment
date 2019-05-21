@@ -1,0 +1,204 @@
+# Default values for Alfresco Process Services.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+replicaCount: 1
+
+alfresco-process-services:
+  enabled: true
+  alfresco-infrastructure:
+    enabled: false
+  processEngine:
+    environment:
+      IDENTITY_SERVICE_ENABLED: true
+      IDENTITY_SERVICE_AUTH: "<ingresscontrollerurl>/auth"
+
+  resources:
+    requests:
+      memory: "2000Mi"
+    limits:
+      memory: "3000Mi"
+
+activitiAppProperties:
+  enabled: true
+  # Activiti General server settings.
+  # http://docs.alfresco.com/activiti/docs/admin-guide/1.5.0/#_general_server_settings for reference
+  server.onpremise: "true"
+  server.stencil.custom.allowed: "true"
+  server.contextroot: /activiti-app
+
+  # Datasource Information.
+  # http://docs.alfresco.com/activiti/docs/admin-guide/1.5.0/#databaseConfiguration for reference.
+
+  license.multi-tenant: "false"
+  # Database username and password
+  datasource.username:  
+  datasource.password:  
+
+  # Driver to be used
+  datasource.driver: "org.postgresql.Driver"
+
+  # Database url. H2 by default, for standalone runs
+  # THis should point to your database ( external possibly )
+  datasource.url:  
+
+  # Hibernate dialect of choice
+  hibernate.dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # ElasticSearch configuration.
+  # http://docs.alfresco.com/activiti/docs/admin-guide/1.5.0/#elasticSearchConfig for reference
+
+
+  elastic-search.server.type: embedded
+  elastic-search.discovery.type: unicast
+  elastic-search.cluster.name: elasticsearch
+  elastic-search.discovery.hosts: localhost:9300
+  elastic-search.data.path: /usr/local/elasticsearch/data
+
+  event.generation.enabled: true
+  event.processing.enabled: true
+
+
+  # Admin user informations
+  #  user: admin@app.activiti.com , password: admin.
+  admin.email: admin@app.activiti.com
+  admin.passwordHash: 25a463679c56c474f20d8f592e899ef4cb3f79177c19e3782ed827b5c0135c466256f1e7b60e576e
+  admin.lastname: Administrator
+  admin.group: Administrators
+
+  # ContentStorage
+  # http://docs.alfresco.com/activiti/docs/admin-guide/1.5.0/#contentStorageConfig for reference
+  contentstorage.fs.rootFolder: /usr/local/data/
+  contentstorage.fs.createRoot: true
+  contentstorage.fs.depth: 4
+  contentstorage.fs.blockSize: 1024
+
+  # Security settings
+  security.csrf.disabled: false
+
+  #password min length
+  security.password.constraints.min-length: 8
+  security.password.constraints.reg-exp: "^(?: .*[a-z])(?: .*[A-Z]).+$"
+
+  # USER TOKEN TTL
+  # after how long the cookie should expire
+  security.cookie.max-age: 1800
+  # how often the cookie get controlled
+  security.cookie.database-removal.cronExpression: "0 0/10 * * * ?"
+
+  # SIGN UP TO THE APP
+  security.signup.disabled: true
+
+  # DISABLE SCRIPTING
+  validator.editor.bpmn.disable.scripttask: true
+  validator.editor.bpmn.disable.scripttask.groovy: true
+
+  # Beans whitelisting
+  beans.whitelisting.enabled: true
+
+  # EL whitelisting
+  el.whitelisting.enabled: true
+
+  # CORS settings
+  cors.enabled: true
+  cors.allowed.origins: "*"
+  cors.allowed.methods: GET,POST,HEAD,OPTIONS,PUT,DELETE
+  cors.allowed.headers: Authorization,Content-Type,Cache-Control,X-Requested-With,accept,Origin,Access-Control-Request-Method,Access-Control-Request-Headers,X-CSRF-Token
+  cors.exposed.headers: Access-Control-Allow-Origin,Access-Control-Allow-Credentials
+  cors.support.credentials: true
+  cors.preflight.maxage: 10
+
+  # Email template settings
+  spring.freemarker.template-loader-path: classpath:/email-templates
+ldapconfig:
+  enabled: true
+  authentication:
+    #if true, it's only on ACS; APS will always be authenticating through AIS.
+    enabled: false
+    database:
+      fallback: false
+  synchronization:
+    full:
+      enabled: false
+      cronExpression: 0 0 0 * * ?
+    differential:
+      enabled: false
+      cronExpression: 0 0 */4 * * ?
+  url: ""
+  principal: ""
+  credentials: ""
+  authentication: simple
+  protocol: ""
+  dn: 
+  namingFactory: com.sun.jndi.ldap.LdapCtxFactory
+  referral: ignore
+  userSearchBase: ""
+  personQuery: (&(objectclass\=user)(givenName\=*)(sn\=*)(userAccountControl\:1.2.840.113556.1.4.803\:\=512))
+  personDifferentialQuery: (&(objectclass\=user)(givenName\=*)(sn\=*)(userAccountControl\:1.2.840.113556.1.4.803\:\=512)(!(whenChanged<\={0})))
+  groupSearchBase: 
+  groupQuery: (objectclass\=group)
+  groupDifferentialQuery: (&(objectclass\=group)(!(whenChanged<\={0})))
+  userIdAttributeName: samAccountName
+  userFirstNameAttributeName: givenName
+  userLastNameAttributeName: sn
+  userEmailAttributeName: mail
+  groupIdAttributeName: cn
+  groupMemberAttributeName: member
+  userType: user
+  groupType: group
+  adminUsers: admin
+  locale: US
+  language: en
+  timezone: GMT
+  truststore:
+    passphrase: passphrase
+    type: JCEKS
+    data: VHJ1c3RTdG9yZURhdGEK
+alfresco-content-services:
+  enabled: true
+  registryPullSecrets: quay-registry-secret
+  encryptedProperties:
+    enabled: false
+  messageBroker:
+    url:
+    user: admin
+    password: admin
+  alfresco-infrastructure:
+    enabled: false
+    activemq:
+      enabled: false
+  repository:
+# DEPLOY-466 / DEPLOY-467 - Remove image pin as we are using the ACS provided images
+#    image:
+#      repository: quay.io/alfresco/alfresco-dbp-repository
+#      tag: "0.3-SNAPSHOT"
+    environment:
+      # The SYNC_SERVICE_URI should contain the details of the ingress host and port.
+      SYNC_SERVICE_URI: "<ingresscontrollerurl>/syncservice"
+      # The IDENTITY_SERVICE_URI should contain the details of the ingress host and port.
+      IDENTITY_SERVICE_URI: "<ingresscontrollerurl>/auth"
+      JAVA_OPTS: " -Dsolr.base.url=/solr
+        -Dsolr.secureComms=none
+        -Dindex.subsystem.name=solr6
+        -Dalfresco.cluster.enabled=true
+        -Ddeployment.method=HELM_CHART
+        -Xms2000M -Xmx2000M
+        -Ddsync.service.uris=\"$SYNC_SERVICE_URI\"
+        -Dauthentication.chain=identity-service1:identity-service,alfrescoNtlm1:alfrescoNtlm
+        -Didentity-service.enable-basic-auth=true
+        -Didentity-service.authentication.validation.failure.silent=false
+        -Didentity-service.auth-server-url=\"$IDENTITY_SERVICE_URI\"
+        -Didentity-service.realm=alfresco
+        -Didentity-service.resource=alfresco"
+  share:
+# DEPLOY-466 / DEPLOY-467 - Remove image pin as we are using the ACS provided images
+#    image:
+#      repository: quay.io/alfresco/alfresco-dbp-share
+#      tag: "0.3-SNAPSHOT"
+  
+alfresco-sync-service:
+  enabled: false
+  alfresco-infrastructure:
+    enabled: false
+
+alfresco-infrastructure:
+  enabled: true

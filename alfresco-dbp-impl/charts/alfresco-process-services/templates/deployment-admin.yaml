@@ -1,0 +1,41 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "aps.fullname" . }}-admin
+  labels:
+    app: {{ template "aps.fullname" . }}-admin
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: admin
+spec:
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "aps.fullname" . }}-admin
+        release: {{ .Release.Name }}
+    spec:
+      imagePullSecrets:
+        - name: {{ .Values.registryPullSecrets }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.adminApp.image.repository }}:{{ .Values.adminApp.image.tag }}"
+          imagePullPolicy: {{ .Values.adminApp.image.pullPolicy }}
+          envFrom:
+          - configMapRef:
+              # config map to use, defined in config-repository.yaml
+              name: {{ template "aps.fullname" . }}-admin-configmap
+          ports:
+            - containerPort: {{ .Values.adminApp.image.internalPort }}
+          resources:
+{{ toYaml .Values.adminApp.resources | indent 12 }}
+    {{- if .Values.adminApp.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.adminApp.nodeSelector | indent 8 }}
+    {{- end }}
+      initContainers:
+        - name: acs-init
+          image: radial/busyboxplus:curl
+          command: ["sh", '-c', 'until $(curl --output /dev/null --silent  --fail  http://dbp-deploy-alfresco-cs-repository:80/alfresco/api/-default-/public/alfresco/versions/1/probes/-ready- --connect-timeout 1 --max-time 2); do echo waiting for acs; sleep 2 ; done;']
+

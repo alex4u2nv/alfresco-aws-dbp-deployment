@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  # the name of the config map
+  name: {{ .Release.Name }}-startup-share
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    component: acs
+data:
+  share.xml: |+
+    <?xml version='1.0' encoding='utf-8'?>
+    <Context crossContext="true">
+      <Resources cachingAllowed="true" cacheMaxSize="200000">
+      </Resources>
+    </Context>
+  startup.sh: |+
+    mkdir -p /usr/local/tomcat/conf/Catalina/localhost/
+    cp /usr/local/tomcat/startup/share.xml /usr/local/tomcat/conf/Catalina/localhost/share.xml
+    /usr/local/tomcat/shared/classes/alfresco/substituter.sh
+    

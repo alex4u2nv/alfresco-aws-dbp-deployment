@@ -1,0 +1,70 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "aps.fullname" . }}-aps
+  labels:
+    app: {{ template "aps.fullname" . }}-aps
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "aps.fullname" . }}-aps
+        release: {{ .Release.Name }}
+    spec:
+      imagePullSecrets:
+        - name: {{ .Values.registryPullSecrets }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.processEngine.image.repository }}:{{ .Values.processEngine.image.tag }}"
+          imagePullPolicy: {{ .Values.processEngine.image.pullPolicy }}
+          command: ["/bin/sh"]
+          args: ["-c", "cp /usr/local/tomcat/private/*.properties /usr/local/tomcat/lib/; cp /usr/local/tomcat/private/entrypoint.sh /root/entrypoint.sh;  /root/entrypoint.sh" ]
+          envFrom:
+            - configMapRef:
+                # config map to use, defined in config-repository.yaml
+                name: {{ template "aps.fullname" . }}-aps-configmap
+          ports:
+            - containerPort: {{ .Values.processEngine.image.internalPort }}
+          volumeMounts:
+          - name: data
+            mountPath: {{ .Values.persistence.mountPath }}
+            subPath: {{ .Values.persistence.subPath }}
+          {{- if ne .Values.license.secretName "none" }}
+          - name: license
+            mountPath: "/root/.activiti/enterprise-license/"
+            readOnly: true
+          {{- end}}
+          {{- if .Values.processEngine.activitiProperties }}
+          - name: properties
+            mountPath: "/usr/local/tomcat/private/"
+            readOnly: true
+          {{- end}}
+          resources:
+{{ toYaml .Values.processEngine.resources | indent 12 }}
+    {{- if .Values.processEngine.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.processEngine.nodeSelector | indent 8 }}
+    {{- end }}
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ .Values.persistence.existingClaim }}
+      {{- if ne .Values.license.secretName "none" }}
+      - name: license
+        secret:
+          secretName: {{ .Values.license.secretName }}
+      {{- end}}
+      {{- if .Values.processEngine.activitiProperties }}
+      - name: properties
+        configMap:
+          name: {{ .Release.Name }}-aps-properties
+      {{- end}}
+      initContainers:
+        - name: acs-init
+          image: radial/busyboxplus:curl
+          command: ["sh", '-c', 'until $(curl --output /dev/null --silent  --fail  http://dbp-deploy-alfresco-cs-repository:80/alfresco/api/-default-/public/alfresco/versions/1/probes/-ready- --connect-timeout 1 --max-time 2); do echo waiting for acs; sleep 2 ; done;']
+

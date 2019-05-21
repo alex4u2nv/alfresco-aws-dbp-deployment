@@ -1,0 +1,6 @@
+dependencies:
+- name: activemq
+  repository: https://kubernetes-charts.alfresco.com/stable
+  version: "1"
+digest: sha256:269c4d6fe76345701622183e98bddcee0ce7b26d5708df474034f26cb1d44270
+generated: 2018-10-26T13:19:21.624106528Z

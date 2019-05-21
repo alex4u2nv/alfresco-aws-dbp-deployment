@@ -1,0 +1,20 @@
+# Defines the service for the alfresco content repository app
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "digital-workspace.shortname" . }}
+  labels:
+    app: {{ template "digital-workspace.shortname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: digitalWorkspaceApplication
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.externalPort }}
+      targetPort: {{ .Values.image.internalPort }}
+      name: {{ .Values.service.name }}
+  selector:
+    app: {{ template "digital-workspace.shortname" . }}
+    release: {{ .Release.Name }}

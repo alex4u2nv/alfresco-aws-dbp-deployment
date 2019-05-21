@@ -1,0 +1,15 @@
+dependencies:
+- name: alfresco-process-services
+  repository: https://kubernetes-charts.alfresco.com/incubator
+  version: 0.1.5
+- name: alfresco-content-services
+  repository: https://kubernetes-charts.alfresco.com/incubator
+  version: 1.1.8
+- name: alfresco-sync-service
+  repository: https://kubernetes-charts.alfresco.com/incubator
+  version: 0.1.0
+- name: alfresco-infrastructure
+  repository: https://kubernetes-charts.alfresco.com/incubator
+  version: 5.0.0
+digest: sha256:e8c1d5746ce0cba25288bb7c8cdbc7dc6e17df0e21de6bc5e48b89548c9ee287
+generated: 2019-02-28T18:02:48.826372142Z

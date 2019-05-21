@@ -1,0 +1,117 @@
+# Defines the deployment for the alfresco content repository app
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "content-services.shortname" . }}-repository
+  labels:
+    app: {{ template "content-services.shortname" . }}-repository
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: repository
+spec:
+  replicas: {{ .Values.repository.replicaCount }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "content-services.shortname" . }}-repository
+        release: {{ .Release.Name }}
+        component: repository
+    spec:
+      {{- if .Values.registryPullSecrets }}
+      # only set this secret if a private docker registry variable is defined
+      imagePullSecrets:
+        - name: {{ .Values.registryPullSecrets }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.repository.image.repository }}:{{ .Values.repository.image.tag }}"
+          command: ["/bin/sh"]
+          args: ["-c", "find /usr/local/tomcat/private/props/ -type f -exec cat {} \\; >> /usr/local/tomcat/shared/classes/alfresco-global.properties; cp -R -L /usr/local/tomcat/private/shared/* /usr/local/tomcat/shared/; cp /usr/local/tomcat/shared/classes/alfresco/extension/license/* /usr/local/tomcat/;  catalina.sh run -security "]
+          imagePullPolicy: {{ .Values.repository.image.pullPolicy }}
+          envFrom:
+          - secretRef: 
+              name: {{ template "content-services.shortname" . }}-dbsecret
+          {{- if .Values.s3connector.enabled }}
+          - secretRef:
+              # s3 connector secret keys
+              name: {{ template "content-services.shortname" . }}-s3secret
+          {{- end }}
+          - configMapRef:
+              # config map to use, defined in config-repository.yaml
+              name: {{ template "content-services.shortname" . }}-repository-configmap
+          ports:
+            # internal port and the hazelcast port used for clustering
+            - containerPort: {{ .Values.repository.image.internalPort }}
+            - containerPort: {{ .Values.repository.image.hazelcastPort }}
+          resources:
+{{ toYaml .Values.repository.resources | indent 12 }}
+          volumeMounts:
+          {{- if .Values.persistence.repository.enabled }}
+          - name: data
+            mountPath: {{ .Values.persistence.repository.data.mountPath }}
+            subPath: {{ .Values.persistence.repository.data.subPath }}
+          {{- end }}
+          {{- if ne .Values.license.secretName "none" }}
+          - name: license
+            mountPath: "/usr/local/tomcat/private/shared/classes/alfresco/extension/license"
+            readOnly: true
+          {{- end }}
+          {{- if .Values.encryptedProperties.enabled }}
+          - name: keys
+            mountPath: "/usr/local/tomcat/private/shared/classes/alfresco/extension/enterprise/"
+            readOnly: true
+          - name: props
+            mountPath: "/usr/local/tomcat/private/shared/classes/"
+            readOnly: true
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /alfresco/api/-default-/public/alfresco/versions/1/probes/-ready-
+              port: {{ .Values.repository.image.internalPort }}
+            initialDelaySeconds: {{ .Values.repository.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.repository.readinessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.repository.readinessProbe.failureThreshold }}
+            timeoutSeconds: {{ .Values.repository.readinessProbe.timeoutSeconds }}
+          livenessProbe:
+            httpGet:
+              path: /alfresco/api/-default-/public/alfresco/versions/1/probes/-live-
+              port: {{ .Values.repository.image.internalPort }}
+            initialDelaySeconds: {{ .Values.repository.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.repository.livenessProbe.periodSeconds }}
+            failureThreshold: 1
+            timeoutSeconds: {{ .Values.repository.livenessProbe.timeoutSeconds }}
+      initContainers:
+        - name: keycloak
+          image: radial/busyboxplus:curl
+          command: ["sh", '-c', 'until $(curl --output /dev/null --silent --head --fail {{ .Values.externalProtocol }}://{{ .Values.externalHost  }}:{{ .Values.externalPort }}/auth/realms/alfresco/.well-known/uma2-configuration --connect-timeout 1 --max-time 2); do echo waiting for acs; sleep 2 ; done;']
+      {{- if eq .Values.database.external false }}
+      initContainers:
+        # wait for the DB to startup before this deployment can start
+        - name: init-db
+          image: busybox
+          command: ['sh', '-c', 'until nc -w1 {{ printf "%s-%s" .Release.Name .Values.postgresql.nameOverride }} {{ .Values.postgresql.service.port }}; do echo "waiting for {{ printf "%s-%s" .Release.Name .Values.postgresql.nameOverride }}"; sleep 2; done;']
+      {{- end }}
+      volumes:
+      {{- if .Values.persistence.repository.enabled }}
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ .Values.persistence.existingClaim }}
+      {{- end }}
+      {{- if ne .Values.license.secretName "none" }}
+      - name: license
+        secret:
+          secretName: {{ .Release.Name }}-{{ .Values.license.secretName }}
+      {{- end }}
+      {{- if .Values.encryptedProperties.enabled  }}
+      - name: keys
+        secret:
+          secretName: {{ .Release.Name }}-{{ .Values.encryptedProperties.keySecretName }}
+      - name: props
+        secret:
+          secretName: {{ .Release.Name }}-{{ .Values.encryptedProperties.propSecretName }}
+      {{- end }}
+      - name: globalprops
+        configMap:
+          name: {{ template "content-services.shortname" . }}-global-properties-configmap
+     

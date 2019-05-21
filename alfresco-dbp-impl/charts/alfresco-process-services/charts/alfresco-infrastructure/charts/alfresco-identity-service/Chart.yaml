@@ -1,0 +1,13 @@
+description: The Alfresco Identity Service provides a Single Sign On experience for
+  the Alfresco Digital Business Platform (DBP).
+home: https://github.com/Alfresco/alfresco-identity-service/helm
+keywords:
+- alfresco
+- keycloak
+- identity-service
+maintainers:
+- name: Alfresco
+name: alfresco-identity-service
+sources:
+- https://github.com/Alfresco/alfresco-identity-service/helm
+version: 0.3.8

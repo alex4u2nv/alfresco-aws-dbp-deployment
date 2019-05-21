@@ -1,0 +1,12 @@
+description: Alfresco Event Gateway
+home: https://github.com/Alfresco/alfresco-event-gateway
+keywords:
+- alfresco
+- events
+- gateway
+maintainers:
+- name: Alfresco
+name: alfresco-event-gateway
+sources:
+- https://github.com/Alfresco/alfresco-event-gateway-deployment/helm
+version: 0.1.2

@@ -1,0 +1,26 @@
+{{- if .Values.networkpolicysetting.enabled }}
+# Allow ADW application communicate with other components
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ template "digital-workspace.shortname" . }}
+  labels:
+    component: digitalWorkspaceApplication
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ template "digital-workspace.shortname" . }}
+  policyTypes:
+  - Ingress
+  ingress:
+    - from:
+      # Allow traffic from nginx-ingress
+      - podSelector:
+          matchLabels:
+            app: nginx-ingress
+
+      ports:
+        - protocol: TCP
+          port: 80
+
+{{- end }}

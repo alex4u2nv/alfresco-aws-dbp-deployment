@@ -1,0 +1,15 @@
+dependencies:
+- name: postgresql
+  repository: https://kubernetes-charts.storage.googleapis.com/
+  version: 0.9.3
+- name: alfresco-search
+  repository: https://kubernetes-charts.alfresco.com/stable
+  version: 0.0.8
+- name: alfresco-infrastructure
+  repository: https://kubernetes-charts.alfresco.com/stable
+  version: 2.0.0
+- name: alfresco-digital-workspace
+  repository: https://kubernetes-charts.alfresco.com/stable
+  version: 1.0.0
+digest: sha256:e36a3a3772669083877bbc3c2d51eca5aa74f23a6b9fdff529e4587387e922a3
+generated: 2019-01-14T12:54:02.099997816Z

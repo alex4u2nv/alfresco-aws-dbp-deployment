@@ -1,0 +1,38 @@
+# Java
+*.class
+hs_err_pid*
+aws/templates/full-deployment-parameters.json
+
+# Eclipse
+.classpath
+.settings
+.project
+
+# Intellij
+.idea/
+*.iml
+*.iws
+
+# Mac
+.DS_Store
+
+# Maven
+target
+
+# Package Files #
+*.jar
+*.war
+*.ear
+
+# AWS
+cloud-formation-deploy.yaml
+
+# Kubernetes Helm
+requirements.lock
+**/charts/*.tgz
+
+# Alfresco
+*.log
+*.log.*
+*.lic
+

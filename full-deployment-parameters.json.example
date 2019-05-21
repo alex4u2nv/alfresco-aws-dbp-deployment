@@ -1,0 +1,162 @@
+[
+  {
+    "ParameterKey": "VPCID",
+    "ParameterValue": "vpc-"
+  },
+  {
+    "ParameterKey": "PrivateSubnet1ID",
+    "ParameterValue": "subnet-"
+  },
+  {
+    "ParameterKey": "PrivateSubnet2ID",
+    "ParameterValue": "subnet-"
+  },
+  {
+    "ParameterKey": "PublicSubnet1ID",
+    "ParameterValue": "subnet-"
+  },
+  {
+    "ParameterKey": "PublicSubnet2ID",
+    "ParameterValue": "subnet-"
+  },
+  {
+    "ParameterKey": "K8sNamespace",
+    "ParameterValue": "dbp"
+  },
+  {
+    "ParameterKey": "DBEndpoint",
+    "ParameterValue": "endpoint.rds.amazonaws.com"
+  },
+  {
+    "ParameterKey": "DBType",
+    "ParameterValue": "postgresql"
+  },
+  {
+    "ParameterKey": "DBUsername",
+    "ParameterValue": ""
+  },
+   {
+    "ParameterKey": "DBPassword",
+    "ParameterValue": ""
+  },
+   {
+    "ParameterKey": "ACSDBName",
+    "ParameterValue": ""
+  },
+   {
+    "ParameterKey": "APSDBName",
+    "ParameterValue": ""
+  },
+   {
+    "ParameterKey": "APSDBAdminName",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "AISDBName",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "ActiveMQEndpoint",
+    "ParameterValue": "ssl://activemq.mq.us-east-1.amazonaws.com:61617"
+  },
+  {
+    "ParameterKey": "ActiveMQUsername",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "ActiveMQPassword",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "ElasticSearchEndpoint",
+    "ParameterValue": "not-used-embedded-version"
+  },
+  {
+    "ParameterKey": "S3BucketLocation",
+    "ParameterValue": "US"
+  },
+  {
+    "ParameterKey": "ACSS3BucketName",
+    "ParameterValue": "s3bucket"
+  },
+  {
+    "ParameterKey": "APSS3BucketName",
+    "ParameterValue": "s3bucket"
+  },
+  {
+    "ParameterKey": "APSS3AccessKey",
+    "ParameterValue": "notused"
+  },
+  {
+    "ParameterKey": "APSS3SecretKey",
+    "ParameterValue": "notused"
+  },
+  {
+    "ParameterKey": "RepoPods",
+    "ParameterValue": "1"
+  },
+  {
+    "ParameterKey": "S3EncryptionKMSAlias",
+    "ParameterValue": "Just GUID of the Key"
+  },
+  {
+    "ParameterKey": "AvailabilityZones",
+    "ParameterValue": "us-east-1a,us-east-1b"
+  },
+  {
+    "ParameterKey": "KeyPairName",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "RemoteAccessCIDR",
+    "ParameterValue": "0.0.0.0/0"
+  },
+  {
+    "ParameterKey": "TemplateBucketName",
+    "ParameterValue": "s3 bucket name for installation files"
+  },
+  {
+    "ParameterKey": "TemplateBucketKeyPrefix",
+    "ParameterValue": "s3 bucket prefix where installation files will go"
+  },
+  {
+    "ParameterKey": "EksExternalUserArn",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "ElbCertArn",
+    "ParameterValue": "arn:aws:acm:us-east-1:accountid:certificate/certid"
+  },
+  {
+    "ParameterKey": "ExternalName",
+    "ParameterValue": "dbp.dnsname.com"
+  },
+  {
+    "ParameterKey": "Route53DnsZone",
+    "ParameterValue": "dnsname.com."
+  },
+  {
+    "ParameterKey": "UseCrossRegionReplication",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "NodesMetricsEnabled",
+    "ParameterValue": "true"
+  },
+  {
+    "ParameterKey": "ReplicationBucketRegion",
+    "ParameterValue": "us-west-1"
+  },
+  {
+    "ParameterKey": "AlfrescoPassword",
+    "ParameterValue": "alfresco"
+  },
+  {
+    "ParameterKey": "RegistryCredentials",
+    "ParameterValue": "base64_encoded_value"
+  },
+  {
+    "ParameterKey": "DeployInfrastructureOnly",
+    "ParameterValue": "false"
+  }
+]

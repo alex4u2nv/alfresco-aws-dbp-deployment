@@ -1,0 +1,86 @@
+# Alfresco Enterprise ACS Deployment AWS
+# Copyright (C) 2005 - 2018 Alfresco Software Limited
+# License rights for this program may be obtained from Alfresco Software, Ltd.
+# pursuant to a written agreement and any use of this program without such an
+# agreement is prohibited.
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "EFS stack that deploys EFS and sets mountpoints in existent subnets."
+
+Metadata:
+    AWS::CloudFormation::Interface:
+      ParameterGroups:
+        - Label:
+            default: EFS Stack Configuration
+          Parameters:
+            - SecurityGroup
+            - PrivateSubnet1ID
+            - PrivateSubnet2ID
+
+      ParameterLabels:
+        SecurityGroup:
+          default: The Security Group ID to use for EFS
+        PrivateSubnet1ID:
+          default: The ID of Private Subnet 1
+        PrivateSubnet2ID:
+          default: The ID of Private Subnet 2
+
+Parameters:
+    SecurityGroup:
+      Description: "ID for the VPC, This will be used to get the default security group"
+      Type: "AWS::EC2::SecurityGroup::Id"
+    PrivateSubnet1ID:
+      Description: "ID of Private Subnet 1"
+      Type: "AWS::EC2::Subnet::Id"   
+    PrivateSubnet2ID:
+      Description: "ID of Private Subnet 2"
+      Type: "AWS::EC2::Subnet::Id"
+
+Resources:
+  Filesystem:
+    Type: AWS::EFS::FileSystem
+    Properties: 
+      Encrypted: true
+      FileSystemTags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-k8s-efs" 
+      PerformanceMode: "generalPurpose"
+
+  MountTarget1:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref Filesystem
+      SecurityGroups:
+        - !Ref SecurityGroup
+      SubnetId: !Ref PrivateSubnet1ID
+
+  MountTarget2:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref Filesystem
+      SecurityGroups:
+        - !Ref SecurityGroup
+      SubnetId: !Ref PrivateSubnet2ID
+
+  NFSIngressRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: 
+      Description: "NFS used for Persistent volume claims in k8s"
+      GroupId: !Ref SecurityGroup
+      IpProtocol: tcp
+      FromPort: 2049
+      ToPort: 2049
+      SourceSecurityGroupId: !Ref SecurityGroup
+
+Outputs:
+  SubstackName:
+    Value: !Sub "${AWS::StackName}" 
+  EFSId:
+    Value: !Ref Filesystem
+  EFSName:
+    Value: !Sub "${Filesystem}.efs.${AWS::Region}.amazonaws.com"
+  MountTargets:
+    Value: !Join
+      - ","
+      - - !Ref MountTarget1
+        - !Ref MountTarget2

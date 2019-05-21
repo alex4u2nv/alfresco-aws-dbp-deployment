@@ -1,0 +1,21 @@
+dependencies:
+- name: rabbitmq-ha
+  repository: https://kubernetes-charts.storage.googleapis.com
+  version: 0.1.1
+- name: activemq
+  repository: https://kubernetes-charts.alfresco.com/incubator
+  version: 0.1.0
+- name: alfresco-identity-service
+  repository: https://kubernetes-charts.alfresco.com/incubator
+  version: 0.3.8
+- name: alfresco-activiti-cloud-registry
+  repository: https://kubernetes-charts.alfresco.com/incubator
+  version: 0.1.0
+- name: alfresco-api-gateway
+  repository: https://kubernetes-charts.alfresco.com/incubator
+  version: 0.1.1
+- name: nginx-ingress
+  repository: https://kubernetes-charts.storage.googleapis.com/
+  version: 0.14.0
+digest: sha256:eb371c6552bf91bf8bf567cc98308e40eef4dbd6cf60276456675e1d85d75fd7
+generated: 2018-08-10T12:28:58.407671468Z

@@ -1,0 +1,8 @@
+dependencies:
+  - name: activemq
+    version: ^1.0.0
+    repository: https://kubernetes-charts.alfresco.com/stable
+    alias: activemq-public
+    export-values:
+       - child: activemq-public
+         parent: activemq-public

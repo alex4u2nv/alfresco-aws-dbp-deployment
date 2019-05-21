@@ -1,0 +1,1424 @@
+# Alfresco Enterprise ACS Deployment AWS
+# Copyright (C) 2005 - 2018 Alfresco Software Limited
+# License rights for this program may be obtained from Alfresco Software, Ltd.
+# pursuant to a written agreement and any use of this program without such an
+# agreement is prohibited.
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Bastion Stack that is used to provision an EKS Cluster with Worker Nodes in an Auto-Scaling Group."
+
+Metadata:
+    AWS::CloudFormation::Interface:
+      ParameterGroups:
+        - Label:
+            default: Cluster Configuration
+          Parameters:
+            - EksExternalUserArn
+            - EKSClusterName
+            - FluentdReleaseName
+            - TemplateBucketName
+            - TemplateBucketKeyPrefix
+            - K8sNamespace
+        - Label:
+            default: Bastion Stack Configuration
+          Parameters:
+            - VPCID
+            - PrivateSubnet1ID
+            - PrivateSubnet2ID
+            - PublicSubnet1ID
+            - PublicSubnet2ID
+            - EC2LogGroup
+            - KeyPairName
+            - NodeSecurityGroup
+            - RemoteAccessCIDR
+            - BastionInstanceType
+            - MaxNumberOfBastionNodes
+            - MinNumberOfBastionNodes
+            - DesiredNumberOfBastionNodes
+        - Label:
+            default: EKS Worker Nodes Stack Configuration
+          Parameters:
+            - NodeInstanceRole
+            - NodeInstanceRoleArn
+            - NodeInstanceType
+            - NodeSecurityGroup
+            - MaxNumberOfNodes
+            - MinNumberOfNodes
+            - DesiredNumberOfNodes
+            - NodesMetricsEnabled
+
+      ParameterLabels:
+        K8sNamespace:
+          default: The Kubernetes namespace
+        TemplateBucketName:
+          default: The name of the S3 bucket that holds the templates
+        TemplateBucketKeyPrefix:
+          default: The Key prefix for the templates in the S3 template bucket
+        VPCID:
+          default: The ID of the VPC to deploy the Bastion and EKS Cluster into
+        PrivateSubnet1ID:
+          default: The ID of the first private subnet to deploy EKS Workers into
+        PrivateSubnet2ID:
+          default: The ID of the second private subnet to deploy EKS Workers into
+        PublicSubnet1ID:
+          default: The ID of the first public subet to deploy EKS into
+        PublicSubnet2ID:
+          default: The ID of the second public subnet to deploy EKS into
+        EC2LogGroup:
+          default: The bastion log group name
+        KeyPairName:
+          default: The key pair name to use to access the instances
+        RemoteAccessCIDR:
+          default: The CIDR block to allow remote access
+        BastionInstanceType:
+          default: The instance type to deploy Bastion to
+        MaxNumberOfBastionNodes:
+          default: The maximum number of nodes to scale up to for Bastion
+        MinNumberOfBastionNodes:
+          default: The minimum number of nodes to scale down to for Bastion
+        DesiredNumberOfBastionNodes:
+          default: The desired number of nodes to keep running for Bastion
+        NodeInstanceRole:
+          default: The AWS IAM Role to be applied to the EKS Worker Nodes
+        NodeInstanceRoleArn:
+          default: The AWS IAM Role ARN to be applied to the EKS Worker Nodes
+        NodeInstanceType:
+          default: The instance type to deploy EKS Worker Node to
+        NodeSecurityGroup:
+          default: The Security Group of EKS Worker nodes
+        MaxNumberOfNodes:
+          default: The maximum number of nodes to scale up to for EKS Worker Node
+        MinNumberOfNodes:
+          default: The minimum number of nodes to scale down to for EKS Worker Node
+        DesiredNumberOfNodes:
+          default: The desired number of nodes to keep running for EKS Worker Node
+        NodesMetricsEnabled:
+          default: Enables all CloudWatch metrics for the nodes auto scaling group
+        EksExternalUserArn:
+          default: The AWS IAM user arn who will be authorised to connect the cluster externally
+        EKSClusterName:
+          default: The EKS cluster name
+        FluentdReleaseName:
+          default: The helm chart release name of Fluentd
+
+Parameters:
+    K8sNamespace:
+      Type: String
+      Description: The Kubernetes Namespace
+    TemplateBucketName:
+      AllowedPattern: "^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$"
+      ConstraintDescription: "Bucket name can include numbers, lowercase letters, uppercase letters, and hyphens (-). It cannot start or end with a hyphen (-)."
+      Description: "S3 bucket name that contains the CFN templates (VPC, Bastion etc). This string can include numbers, lowercase letters, uppercase letters, and hyphens (-). It cannot start or end with a hyphen (-)."
+      Type: "String"
+    TemplateBucketKeyPrefix:
+      AllowedPattern: "^[0-9a-zA-Z-/]*$"
+      ConstraintDescription: "Template bucket key prefix can include numbers, lowercase letters, uppercase letters, hyphens (-), and forward slash (/)."
+      Type: "String"
+    NodeSecurityGroup:
+      Description: "ID for the VPC, This will be used to get the node security group"
+      Type: "AWS::EC2::SecurityGroup::Id"
+    VPCID:
+      Description: "ID for the VPC"
+      Type: "AWS::EC2::VPC::Id"
+    PublicSubnet1ID:
+      Description: "ID of Public Subnet 1"
+      Type: "AWS::EC2::Subnet::Id"
+    PublicSubnet2ID:
+      Description: "ID of Public Subnet 2"
+      Type: "AWS::EC2::Subnet::Id"
+    PrivateSubnet1ID:
+      Description: "ID of Private Subnet 1"
+      Type: "AWS::EC2::Subnet::Id"
+    PrivateSubnet2ID:
+      Description: "ID of Private Subnet 2"
+      Type: "AWS::EC2::Subnet::Id"
+    EC2LogGroup:
+      Description: The bastion log group name
+      Type: "String"
+    KeyPairName:
+      Description: "The name of an existing public/private key pair, which allows you to securely connect to your instance after it launches"
+      Type: "AWS::EC2::KeyPair::KeyName"
+    RemoteAccessCIDR:
+      AllowedPattern: "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/([0-9]|[1-2][0-9]|3[0-2]))$"
+      ConstraintDescription: "CIDR block parameter must be in the form x.x.x.x/x"
+      Description: "The CIDR IP range that is permitted to access the AWS resources. It is recommended that you set this value to a trusted IP range."
+      Type: "String"
+    BastionInstanceType:
+      Type: "String"
+      Description: "The type of EC2 instance to be launched for Bastion Host"
+      AllowedValues:
+        # Add more instance types if needed
+        - t2.micro
+        - t2.medium
+        - t2.large
+      ConstraintDescription: "Must contain a valid instance type"
+    DesiredNumberOfBastionNodes:
+      Type: "String"
+      MinLength: 1
+      Description: "The desired number of Bastion instance to run"
+    MaxNumberOfBastionNodes:
+      Type: "String"
+      MinLength: 1
+      Description: "The maximum number of Bastion instances to run"
+    MinNumberOfBastionNodes:
+      Type: "String"
+      MinLength: 1
+      Description: "The minimum number of Bastion instances to run"
+      Default: "1"
+    NodeInstanceRole:
+      Type: "String"
+      Description: "The AWS IAM Role to be applied to the EKS Worker Nodes"
+    NodeInstanceRoleArn:
+      Type: "String"
+      Description: "The AWS IAM Role ARN to be applied to the EKS Worker Nodes"
+    NodeInstanceType:
+      Type: "String"
+      Description: "The type of EC2 instance to be launched for EKS Worker Node"
+      AllowedValues:
+        # Add more instance types if needed
+        - t2.xlarge
+        - t2.2xlarge
+        - m3.xlarge
+        - m3.2xlarge
+        - m4.xlarge
+        - m4.2xlarge
+        - m5.xlarge
+        - m5.2xlarge
+      ConstraintDescription: "Must contain a valid instance type"
+    DesiredNumberOfNodes:
+      Type: "String"
+      MinLength: 1
+      Description: "The desired number of EKS Worker Nodes to run"
+    MaxNumberOfNodes:
+      Type: "String"
+      MinLength: 1
+      Description: "The maximum number of EKS Worker Nodes to run"
+    MinNumberOfNodes:
+      Type: "String"
+      MinLength: 1
+      Description: "The minimum number of EKS Worker Nodes to run"
+    NodesMetricsEnabled:
+      Description: Enables all CloudWatch metrics for the nodes auto scaling group
+      Type: String
+    EksExternalUserArn:
+      Type: String
+      Description: The AWS IAM user arn who will be authorised to connect the cluster externally
+    EKSClusterName:
+      Type: String
+      Description: The name of the eks cluster
+    FluentdReleaseName:
+      AllowedPattern: ".+"
+      ConstraintDescription: The helm chart release name of Fluentd can not be empty
+      Type: String
+      Description: The helm chart release name of Fluentd
+      Default: "alfresco-fluentd"
+
+Mappings:
+  # see https://github.com/aws-quickstart/quickstart-linux-bastion/blob/master/templates/linux-bastion.template for latest AMI IDs
+  BastionAmiRegionMap:
+    us-east-1:
+      AmiId: ami-0080e4c5bc078760e
+    us-west-2:
+      AmiId: ami-01e24be29428c15b2
+    us-east-2:
+      AmiId: ami-0cd3dfa4e37921605
+    eu-central-1:
+      AmiId: ami-0cfbf4f6db41068ac
+    eu-west-1:
+      AmiId: ami-08935252a36e25f85
+    ap-northeast-1:
+      AmiId: ami-00a5245b4816c38e6
+    ap-northeast-2:
+      AmiId: ami-00dc207f8ba6dc919
+    ap-southeast-1:
+      AmiId: ami-05b3bcf7f311194b3
+    ap-southeast-2:
+      AmiId: ami-02fd0b06f06d93dfc
+  # see https://docs.aws.amazon.com/eks/latest/userguide/eks-optimized-ami.html for latest worker node AMI IDs
+  NodeAmiRegionMap:
+    us-west-2:
+      AmiId: ami-0c28139856aaf9c3b
+    us-east-1:
+      AmiId: ami-0eeeef929db40543c
+    us-east-2:
+      AmiId: ami-0484545fe7d3da96f
+    eu-central-1:
+      AmiId: ami-032ed5525d4df2de3
+    eu-west-1:
+      AmiId: ami-098fb7e9b507904e7
+    ap-northeast-1:
+      AmiId: ami-07fdc9272ce5b0ce5
+    ap-northeast-2:
+      AmiId: ami-091e0e1906e653417
+    ap-southeast-1:
+      AmiId: ami-038d55c26bf01998f
+    ap-southeast-2:
+      AmiId: ami-0e07b5081bb77d540
+
+Conditions:
+  isNodesMetricsEnabled: !Equals [!Ref NodesMetricsEnabled, "true"]
+
+Resources:
+
+  SSHMetricFilter:
+    Type: 'AWS::Logs::MetricFilter'
+    Properties:
+      LogGroupName: !Ref EC2LogGroup
+      FilterPattern: ON FROM USER PWD
+      MetricTransformations:
+        - MetricName: SSHCommandCount
+          MetricValue: "1"
+          MetricNamespace: !Join
+            - /
+            - - AWSQuickStart
+              - !Ref 'AWS::StackName'
+
+  EKSServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: eks.amazonaws.com
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+        - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+
+  BastionInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Policies:
+        - PolicyName: !Sub "${TemplateBucketName}-s3-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action:
+                  - s3:GetObject
+                Resource: !Sub "arn:aws:s3:::${TemplateBucketName}/${TemplateBucketKeyPrefix}/scripts/*"
+                Effect: Allow
+        - PolicyName: ecr-access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action:
+                  - ecr:UploadLayerPart
+                  - ecr:BatchDeleteImage
+                  - ecr:DeleteLifecyclePolicy
+                  - ecr:DeleteRepository
+                  - ecr:PutImage
+                  - ecr:UntagResource
+                  - ecr:SetRepositoryPolicy
+                  - ecr:BatchGetImage
+                  - ecr:CompleteLayerUpload
+                  - ecr:DescribeImages
+                  - ecr:TagResource
+                  - ecr:StartLifecyclePolicyPreview
+                  - ecr:InitiateLayerUpload
+                  - ecr:DeleteRepositoryPolicy
+                  - ecr:BatchCheckLayerAvailability
+                Resource:
+                  -  !Sub "arn:aws:ecr:${AWS::AccountId}:${AWS::Region}:repository/acs-platform"
+                  -  !Sub "arn:aws:ecr:${AWS::AccountId}:${AWS::Region}:repository/acs-share"
+                Effect: Allow
+                Sid: accessEcr
+              - Action: ecr:GetAuthorizationToken
+                Resource: "*"
+                Effect: Allow
+        - PolicyName: cloudwatch-logs-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - logs:CreateLogStream
+                  - logs:GetLogEvents
+                  - logs:PutLogEvents
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                  - logs:PutRetentionPolicy
+                  - logs:PutMetricFilter
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${EC2LogGroup}:*"
+                Effect: Allow
+        - PolicyName: bastion-eip-policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action:
+                  - ec2:AssociateAddress
+                  - ec2:DescribeAddresses
+                  - ec2:DescribeVolumes
+                Resource: "*"
+                Effect: Allow
+        - PolicyName: eks-cluster-policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action:
+                  ### This a EKS limitation so far at deployment time
+                  ### Bastion should only be able to delete or do anything to its own cluster
+                  - eks:*
+                  - sts:*
+                  - iam:PassRole
+                  - ec2:DescribeTags 
+                Resource: "*"
+                Effect: Allow
+      Path: /
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Effect: Allow
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+
+  BastionInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref BastionInstanceRole
+      Path: /
+
+  NodeInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+      - !Ref NodeInstanceRole
+
+  # Bastion resources
+  BastionEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  BastionAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      LaunchConfigurationName: !Ref BastionLaunchConfiguration
+      VPCZoneIdentifier:
+        - !Ref PublicSubnet1ID
+        - !Ref PublicSubnet2ID
+      MinSize: !Ref MinNumberOfBastionNodes
+      MaxSize: !Ref MaxNumberOfBastionNodes
+      Cooldown: "300"
+      DesiredCapacity: !Ref DesiredNumberOfBastionNodes
+      Tags:
+        - Key: Name
+          Value: !Sub "${EKSClusterName}-bastion-node"
+          PropagateAtLaunch: true
+        - Key: Component
+          Value: ACS-Bastion-AutoScaling-Group
+          PropagateAtLaunch: true
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT30M
+
+  BastionLaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Metadata:
+      AWS::CloudFormation::Authentication:
+        S3AccessCreds:
+          type: S3
+          roleName: !Ref BastionInstanceRole
+          buckets: !Ref TemplateBucketName
+      AWS::CloudFormation::Init:
+        config:
+          packages:
+            yum:
+              awslogs: []
+              jq: []
+          files:
+            '/etc/awslogs/awscli.conf':
+              content: !Sub |
+                [default]
+                region = ${AWS::Region}
+                [plugins]
+                cwlogs = cwlogs
+              mode: '000644'
+              owner: root
+              group: root
+            '/etc/awslogs/awslogs.conf':
+              content: !Sub |
+                [general]
+                state_file = /var/lib/awslogs/agent-state
+                [/var/log/bastion/bastion.log]
+                file = /var/log/bastion/bastion.log
+                datetime_format = %b %d %H:%M:%S
+                log_stream_name = ${AWS::StackName}/bastion-{instance_id}/var/log/bastion/bastion.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/dmesg]
+                file = /var/log/dmesg
+                log_stream_name = ${AWS::StackName}/bastion-{instance_id}/var/log/dmesg
+                log_group_name = ${EC2LogGroup}
+                [/var/log/messages]
+                datetime_format = %b %d %H:%M:%S
+                file = /var/log/messages
+                log_stream_name = ${AWS::StackName}/bastion-{instance_id}/var/log/messages
+                log_group_name = ${EC2LogGroup}
+                [/var/log/secure]
+                datetime_format = %b %d %H:%M:%S
+                file = /var/log/secure
+                log_stream_name = ${AWS::StackName}/bastion-{instance_id}/var/log/secure
+                log_group_name = ${EC2LogGroup}
+                [/var/log/audit/audit.log]
+                datetime_format =
+                file = /var/log/audit/audit.log
+                log_stream_name = ${AWS::StackName}/bastion-{instance_id}/var/log/audit/audit.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/cron]
+                datetime_format = %b %d %H:%M:%S
+                file = /var/log/cron
+                log_stream_name = ${AWS::StackName}/bastion-{instance_id}/var/log/cron
+                log_group_name = ${EC2LogGroup}
+                [/var/log/cfn-init.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/cfn-init.log
+                log_stream_name = ${AWS::StackName}/bastion-{instance_id}/var/log/cfn-init.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/cfn-hup.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/cfn-hup.log
+                log_stream_name = ${AWS::StackName}/bastion-{instance_id}/var/log/cfn-hup.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/cfn-init-cmd.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/cfn-init-cmd.log
+                log_stream_name = ${AWS::StackName}/bastion-{instance_id}/var/log/cfn-init-cmd.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/cloud-init-output.log]
+                file = /var/log/cloud-init-output.log
+                log_stream_name = ${AWS::StackName}/bastion-{instance_id}/var/log/cloud-init-output.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/amazon/ssm/amazon-ssm-agent.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/amazon/ssm/amazon-ssm-agent.log
+                log_stream_name = ${AWS::StackName}/bastion-{instance_id}/var/log/amazon/ssm/amazon-ssm-agent.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/amazon/ssm/errors.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/amazon/ssm/errors.log
+                log_stream_name = ${AWS::StackName}/bastion-{instance_id}/var/log/amazon/ssm/errors.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/maillog]
+                datetime_format = %b %d %H:%M:%S
+                file = /var/log/maillog
+                log_stream_name = ${AWS::StackName}/bastion-{instance_id}/var/log/maillog
+                log_group_name = ${EC2LogGroup}
+                [/var/log/yum.log]
+                datetime_format = %b %d %H:%M:%S
+                file = /var/log/yum.log
+                log_stream_name = ${AWS::StackName}/bastion-{instance_id}/var/log/yum.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/awslogs.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/awslogs.log
+                log_stream_name = ${AWS::StackName}/bastion-{instance_id}/var/log/awslogs.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/boot.log]
+                file = /var/log/boot.log
+                log_stream_name = ${AWS::StackName}/bastion-{instance_id}/var/log/boot.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/cfn-wire.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/cfn-wire.log
+                log_stream_name = ${AWS::StackName}/bastion-{instance_id}/var/log/cfn-wire.log
+                log_group_name = ${EC2LogGroup}
+              mode: '000644'
+              owner: root
+              group: root
+            /tmp/hardening_bootstrap.sh:
+              source: !Sub "https://s3.${AWS::Region}.amazonaws.com/${TemplateBucketName}/${TemplateBucketKeyPrefix}/scripts/hardening_bootstrap.sh"
+              mode: "000550"
+              owner: root
+              group: root
+              authentication: S3AccessCreds
+            /tmp/eks_bootstrap.sh:
+              content: !Sub |
+                #!/bin/bash
+                set -x
+                echo "Checking whether cluster exists..."
+                aws eks describe-cluster --region ${AWS::Region} --name ${EKSClusterName} &> /dev/null
+                if [ $? -ne 0 ]; then
+                  echo Cluster does not exist, creating...
+                  aws eks create-cluster --region ${AWS::Region} \
+                  --name ${EKSClusterName} \
+                  --role-arn ${EKSServiceRole.Arn} \
+                  --resources-vpc-config subnetIds=${PrivateSubnet1ID},${PrivateSubnet2ID},${PublicSubnet1ID},${PublicSubnet2ID},securityGroupIds=${ControlPlaneSecurityGroup}
+                  if [ $? -ne 0 ]; then
+                    exit 1
+                  fi
+                  sleep 5
+                  STATUS=$(aws eks describe-cluster --region ${AWS::Region} --name ${EKSClusterName} --query cluster.status --output text)
+                  while [ \"$STATUS\" = \"CREATING\" ]; do
+                    echo Cluster is still creating, sleeping for 30 seconds...
+                    sleep 30
+                    STATUS=$(aws eks describe-cluster --region ${AWS::Region} --name ${EKSClusterName} --query cluster.status --output text)
+                  done
+                fi
+                echo Updating kubeconfig file...
+                ENDPOINT=$(aws eks describe-cluster --region ${AWS::Region}  --name ${EKSClusterName} --query cluster.endpoint --output text)
+                CERT_DATA=$(aws eks describe-cluster --region ${AWS::Region}  --name ${EKSClusterName} --query cluster.certificateAuthority.data --output text)
+                sed -i s,ENDPOINT,$ENDPOINT,g /home/ec2-user/.kube/config
+                sed -i s,CERTIFICATE_DATA,$CERT_DATA,g /home/ec2-user/.kube/config
+                export KUBECONFIG=/home/ec2-user/.kube/config
+                echo Checking whether aws-auth configmap exists...
+                kubectl get configmaps/aws-auth -n kube-system &> /dev/null
+                if [ $? -gt 0 ]; then
+                  echo Configmap does not exist, applying...
+                  kubectl apply -f /tmp/aws-auth-cm.yaml
+                fi
+                echo Checking whether tiller serviceaccount exists...
+                kubectl get serviceaccount/tiller -n kube-system &> /dev/null
+                if [ $? -gt 0 ]; then
+                  echo tiller serviceaccount does not exist, applying...
+                  kubectl apply -f /tmp/helm-rbac-config.yaml
+                fi
+              mode: "000750"
+              owner: root
+              group: root
+            /tmp/aws-auth-cm.yaml:
+              content: !Sub |
+                apiVersion: v1
+                kind: ConfigMap
+                metadata:
+                  name: aws-auth
+                  namespace: kube-system
+                data:
+                  mapRoles: |
+                    - rolearn: ${NodeInstanceRoleArn}
+                      username: system:node:{{EC2PrivateDNSName}}
+                      groups:
+                        - system:bootstrappers
+                        - system:nodes
+                  mapUsers: |
+                    - userarn: ${EksExternalUserArn}
+                      username: admin
+                      groups:
+                        - system:masters
+              mode: "000644"
+              owner: root
+              group: root
+            '/tmp/helm-rbac-config.yaml':
+              content: |
+                apiVersion: v1
+                kind: ServiceAccount
+                metadata:
+                  name: tiller
+                  namespace: kube-system
+                ---
+                apiVersion: rbac.authorization.k8s.io/v1beta1
+                kind: ClusterRoleBinding
+                metadata:
+                  name: tiller
+                roleRef:
+                  apiGroup: rbac.authorization.k8s.io
+                  kind: ClusterRole
+                  name: cluster-admin
+                subjects:
+                  - kind: ServiceAccount
+                    name: tiller
+                    namespace: kube-system
+              mode: "000644"
+              owner: root
+              group: root
+            /home/ec2-user/.kube/config:
+              content: !Sub |
+                apiVersion: v1
+                clusters:
+                - cluster:
+                    server: ENDPOINT
+                    certificate-authority-data: CERTIFICATE_DATA
+                  name: kubernetes
+                contexts:
+                - context:
+                    cluster: kubernetes
+                    user: aws
+                  name: aws
+                current-context: aws
+                kind: Config
+                preferences: {}
+                users:
+                - name: aws
+                  user:
+                    exec:
+                      apiVersion: client.authentication.k8s.io/v1alpha1
+                      command: aws-iam-authenticator
+                      args:
+                        - token
+                        - -i
+                        - ${EKSClusterName}
+              mode: "000666"
+              owner: ec2-user
+              group: ec2-user
+            /etc/cfn/cfn-hup.conf:
+              content: !Sub |
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+                interval=1
+              mode: "000400"
+              owner: root
+              group: root
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.BastionLaunchConfiguration.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init --stack=${AWS::StackId} --resource=BastionLaunchConfiguration  --region=${AWS::Region}
+                runas=root
+            /home/ec2-user/.bashrc:
+              content: !Sub |
+                # .bashrc
+
+                # Source global definitions
+                if [ -f /etc/bashrc ]; then
+                  . /etc/bashrc
+                fi
+                echo  "Some useful k8s aliases:
+                  k (kubectl)
+                  pods (get all pods in namespace ${K8sNamespace})
+                  deps (show deployments)
+                  desc pod_id (describe a pod; )
+                  scale pod_id --replicas=INTEGER (scale up/down pods)
+                  terminate pod_id (stop a pod; it will auto redeploy)
+                  logs pod_id (tail a pod's log file)
+                  enter pod_id bash ( log into a pod )
+                  secrets ( return all secrets)
+                  configs ( return config maps)
+                  "
+                # User specific aliases and functions
+                alias k=kubectl
+                alias pods='kubectl get pods --all-namespaces'
+                alias deps='helm list'
+                alias desc='kubectl describe pod -n ${K8sNamespace}'
+                alias scale='kubectl scale deployment -n ${K8sNamespace}'
+                alias terminate='kubectl delete pod -n ${K8sNamespace}'
+                alias logs='kubectl logs -f -n ${K8sNamespace}'
+                alias enter='kubectl exec -it -n ${K8sNamespace}'
+                alias secrets='kubectl get secrets --all-namespaces'
+                alias configs='kubectl get configmap --all-namespaces'
+
+          services:
+            sysvinit:
+              awslogs:
+                enabled: true
+                ensureRunning: true
+                packages:
+                  yum:
+                  - awslogs
+                files:
+                - '/etc/awslogs/awslogs.conf'
+                - '/etc/awslogs/awscli.conf'
+              cfn-hup:
+                enabled: true
+                ensureRunning: true
+                files:
+                - '/etc/cfn/cfn-hup.conf'
+                - '/etc/cfn/hooks.d/cfn-auto-reloader.conf'
+          commands:
+            01_eks-bootstrap:
+              command: "./tmp/eks_bootstrap.sh"
+            02_bastion-bootstrap:
+              command: "./tmp/hardening_bootstrap.sh --tcp-forwarding false --x11-forwarding false"
+    Properties:
+      AssociatePublicIpAddress: true
+      PlacementTenancy: default
+      KeyName: !Ref KeyPairName
+      IamInstanceProfile: !Ref BastionInstanceProfile
+      ImageId: !FindInMap [BastionAmiRegionMap, !Ref "AWS::Region", AmiId]
+      SecurityGroups:
+        - !Ref BastionSecurityGroup
+      InstanceType: !Ref BastionInstanceType
+      UserData:
+        Fn::Base64: !Sub |
+            #!/bin/bash
+            set -x
+            export PATH=$PATH:/usr/local/bin
+            yum install -y https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+            pip install awscli --upgrade
+            easy_install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz
+            EIP_LIST=${BastionEIP},Null,Null,Null
+            CLOUDWATCHGROUP=${EC2LogGroup}
+            curl -o kubectl https://amazon-eks.s3-us-west-2.amazonaws.com/1.11.5/2018-12-06/bin/linux/amd64/kubectl
+            chmod +x ./kubectl
+            mv kubectl /usr/local/bin
+            kubectl version --short --client
+            curl -o aws-iam-authenticator https://amazon-eks.s3-us-west-2.amazonaws.com/1.11.5/2018-12-06/bin/linux/amd64/aws-iam-authenticator
+            chmod +x ./aws-iam-authenticator
+            mv aws-iam-authenticator /usr/local/bin
+            aws-iam-authenticator version
+            curl -o helm.tar.gz https://storage.googleapis.com/kubernetes-helm/helm-v2.12.3-linux-amd64.tar.gz
+            tar xf helm.tar.gz
+            mv ./linux-amd64/helm /usr/local/bin
+            helm version --client
+            cfn-init -v --stack ${AWS::StackName} --resource BastionLaunchConfiguration --region ${AWS::Region}
+            #cfn-hup
+            cfn-signal -e $? --stack ${AWS::StackName} --resource BastionAutoScalingGroup --region ${AWS::Region}
+
+  BastionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-BastionHost-SG"
+      GroupDescription: Enables SSH Access to Bastion Hosts
+      VpcId: !Ref VPCID
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref RemoteAccessCIDR
+
+  # Cluster resources
+  ControlPlaneSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-ControlPlane-SG"
+        - Key: Component
+          Value: ACS-EKS-ControlPlane
+      GroupDescription: Cluster communication with worker nodes
+      VpcId: !Ref VPCID
+
+  NodeSecurityGroupIngressSSH:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow SSH traffic from bastion nodes
+      GroupId: !Ref NodeSecurityGroup
+      SourceSecurityGroupId: !Ref BastionSecurityGroup
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+
+  NodeSecurityGroupIngressDNSTCP:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow DNS TCP traffic
+      GroupId: !Ref NodeSecurityGroup
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 53
+      ToPort: 53
+
+  NodeSecurityIngressDNSUDP:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow DNS UDP traffic
+      GroupId: !Ref NodeSecurityGroup
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      IpProtocol: udp
+      FromPort: 53
+      ToPort: 53
+
+  NodeSecurityIngressHTTP:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow HTTP traffic
+      GroupId: !Ref NodeSecurityGroup
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+
+  NodeSecurityIngressHTTPS:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow HTTPS traffic
+      GroupId: !Ref NodeSecurityGroup
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+
+  NodeSecurityGroupIngressRepoCluster:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow the repo cluster to communicate across worker nodes
+      GroupId: !Ref NodeSecurityGroup
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 5701
+      ToPort: 5701
+
+  NodeSecurityGroupIngressShareCluster:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow the Share cluster to communicate across worker nodes
+      GroupId: !Ref NodeSecurityGroup
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 5801
+      ToPort: 5801
+
+  NodeSecurityGroupIngressRepoShare:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow Repo and Share access across worker nodes
+      GroupId: !Ref NodeSecurityGroup
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+
+  NodeSecurityGroupIngressTransformers:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow transformers access across worker nodes
+      GroupId: !Ref NodeSecurityGroup
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8090
+      ToPort: 8090
+
+  NodeSecurityGroupIngressTransformRouter:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow transform router access across worker nodes
+      GroupId: !Ref NodeSecurityGroup
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8095
+      ToPort: 8095
+
+  NodeSecurityGroupIngressSharedFileStore:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow shared file store access across worker nodes
+      GroupId: !Ref NodeSecurityGroup
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8099
+      ToPort: 8099
+
+  NodeSecurityGroupIngressSOLR:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow SOLR access across worker nodes
+      GroupId: !Ref NodeSecurityGroup
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8983
+      ToPort: 8983
+
+  NodeSecurityGroupIngressActiveMQ:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow ActiveMQ access across worker nodes
+      GroupId: !Ref NodeSecurityGroup
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 61616
+      ToPort: 61616
+
+  NodeSecurityGroupIngressKubernetesDashboard:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow Kubernetes Dashboard access across worker nodes
+      GroupId: !Ref NodeSecurityGroup
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8443
+      ToPort: 8443
+
+  # The following security groups are defined by the AWS EKS worker node template but with a restricted port range
+
+  NodeSecurityGroupFromControlPlaneIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow worker Kubelets and pods to receive communication from the cluster control plane
+      GroupId: !Ref NodeSecurityGroup
+      SourceSecurityGroupId: !Ref ControlPlaneSecurityGroup
+      IpProtocol: tcp
+      FromPort: 10250
+      ToPort: 10250
+
+  ControlPlaneEgressToNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      Description: Allow the cluster control plane to communicate with worker Kubelet and pods
+      GroupId: !Ref ControlPlaneSecurityGroup
+      DestinationSecurityGroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 10250
+      ToPort: 10250
+
+  # The following security groups are defined by the AWS EKS worker node template
+
+  NodeSecurityGroupFromControlPlaneOn443Ingress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow pods running extension API servers on port 443 to receive communication from cluster control plane
+      GroupId: !Ref NodeSecurityGroup
+      SourceSecurityGroupId: !Ref ControlPlaneSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+
+  ControlPlaneEgressToNodeSecurityGroupOn443:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      Description: Allow the cluster control plane to communicate with pods running extension API servers on port 443
+      GroupId: !Ref ControlPlaneSecurityGroup
+      DestinationSecurityGroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+
+  ClusterControlPlaneSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow pods to communicate with the cluster API Server
+      GroupId: !Ref ControlPlaneSecurityGroup
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      ToPort: 443
+      FromPort: 443
+
+  NodeAutoScalingGroup:
+    DependsOn: BastionAutoScalingGroup
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      DesiredCapacity: !Ref DesiredNumberOfNodes
+      LaunchConfigurationName: !Ref NodeLaunchConfig
+      MinSize: !Ref MinNumberOfNodes
+      MaxSize: !Ref MaxNumberOfNodes
+      MetricsCollection:
+        !If
+      - isNodesMetricsEnabled
+      -
+        - Granularity: 1Minute
+      - !Ref "AWS::NoValue"
+      VPCZoneIdentifier:
+        - !Ref PrivateSubnet1ID
+        - !Ref PrivateSubnet2ID
+      Tags:
+      - Key: Name
+        Value: !Sub "${EKSClusterName}-worker-node"
+        PropagateAtLaunch: true
+      - Key: !Sub 'kubernetes.io/cluster/${EKSClusterName}'
+        Value: 'owned'
+        PropagateAtLaunch: true
+      - Key: KubernetesCluster
+        Value: !Sub "${EKSClusterName}"
+        PropagateAtLaunch: true
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: !Ref MinNumberOfNodes
+        MaxBatchSize: !Ref MaxNumberOfNodes
+    CreationPolicy:
+      ResourceSignal:
+        Count: !Ref DesiredNumberOfNodes
+        Timeout: PT30M
+
+  NodeLaunchConfig:
+    DependsOn: BastionAutoScalingGroup
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Metadata:
+      AWS::CloudFormation::Authentication:
+        S3AccessCreds:
+          type: S3
+          roleName: !Ref NodeInstanceRole
+          buckets: !Ref TemplateBucketName
+      AWS::CloudFormation::Init:
+        config:
+          files:
+            '/etc/awslogs/awscli.conf':
+              content: !Sub |
+                [default]
+                region = ${AWS::Region}
+                [plugins]
+                cwlogs = cwlogs
+              mode: '000644'
+              owner: root
+              group: root
+            '/etc/awslogs/awslogs.conf':
+              content: !Sub |
+                [general]
+                state_file = /var/lib/awslogs/agent-state
+                [/var/log/bastion/bastion.log]
+                file = /var/log/bastion/bastion.log
+                datetime_format = %b %d %H:%M:%S
+                log_stream_name = ${AWS::StackName}/workernode-{instance_id}/var/log/bastion/bastion.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/dmesg]
+                file = /var/log/dmesg
+                log_stream_name = ${AWS::StackName}/workernode-{instance_id}/var/log/dmesg
+                log_group_name = ${EC2LogGroup}
+                [/var/log/messages]
+                datetime_format = %b %d %H:%M:%S
+                file = /var/log/messages
+                log_stream_name = ${AWS::StackName}/workernode-{instance_id}/var/log/messages
+                log_group_name = ${EC2LogGroup}
+                [/var/log/secure]
+                datetime_format = %b %d %H:%M:%S
+                file = /var/log/secure
+                log_stream_name = ${AWS::StackName}/workernode-{instance_id}/var/log/secure
+                log_group_name = ${EC2LogGroup}
+                [/var/log/audit/audit.log]
+                datetime_format =
+                file = /var/log/audit/audit.log
+                log_stream_name = ${AWS::StackName}/workernode-{instance_id}/var/log/audit/audit.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/cron]
+                datetime_format = %b %d %H:%M:%S
+                file = /var/log/cron
+                log_stream_name = ${AWS::StackName}/workernode-{instance_id}/var/log/cron
+                log_group_name = ${EC2LogGroup}
+                [/var/log/cfn-init.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/cfn-init.log
+                log_stream_name = ${AWS::StackName}/workernode-{instance_id}/var/log/cfn-init.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/cfn-hup.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/cfn-hup.log
+                log_stream_name = ${AWS::StackName}/workernode-{instance_id}/var/log/cfn-hup.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/cfn-init-cmd.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/cfn-init-cmd.log
+                log_stream_name = ${AWS::StackName}/workernode-{instance_id}/var/log/cfn-init-cmd.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/cloud-init-output.log]
+                file = /var/log/cloud-init-output.log
+                log_stream_name = ${AWS::StackName}/workernode-{instance_id}/var/log/cloud-init-output.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/amazon/ssm/amazon-ssm-agent.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/amazon/ssm/amazon-ssm-agent.log
+                log_stream_name = ${AWS::StackName}/workernode-{instance_id}/var/log/amazon/ssm/amazon-ssm-agent.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/amazon/ssm/errors.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/amazon/ssm/errors.log
+                log_stream_name = ${AWS::StackName}/workernode-{instance_id}/var/log/amazon/ssm/errors.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/maillog]
+                datetime_format = %b %d %H:%M:%S
+                file = /var/log/maillog
+                log_stream_name = ${AWS::StackName}/workernode-{instance_id}/var/log/maillog
+                log_group_name = ${EC2LogGroup}
+                [/var/log/yum.log]
+                datetime_format = %b %d %H:%M:%S
+                file = /var/log/yum.log
+                log_stream_name = ${AWS::StackName}/workernode-{instance_id}/var/log/yum.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/kube-proxy.log]
+                datetime_format =
+                file = /var/log/kube-proxy.log
+                log_stream_name = ${AWS::StackName}/workernode-{instance_id}/var/log/kube-proxy.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/awslogs.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/awslogs.log
+                log_stream_name = ${AWS::StackName}/workernode-{instance_id}/var/log/awslogs.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/boot.log]
+                file = /var/log/boot.log
+                log_stream_name = ${AWS::StackName}/workernode-{instance_id}/var/log/boot.log
+                log_group_name = ${EC2LogGroup}
+                [/var/log/cfn-wire.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/cfn-wire.log
+                log_stream_name = ${AWS::StackName}/workernode-{instance_id}/var/log/cfn-wire.log
+                log_group_name = ${EC2LogGroup}
+              mode: '000644'
+              owner: root
+              group: root
+            '/tmp/hardening_bootstrap.sh':
+              source: !Sub "https://s3.${AWS::Region}.amazonaws.com/${TemplateBucketName}/${TemplateBucketKeyPrefix}/scripts/hardening_bootstrap.sh"
+              mode: "000550"
+              owner: root
+              group: root
+              authentication: S3AccessCreds
+          services:
+            sysvinit:
+              awslogsd:
+                enabled: true
+                ensureRunning: true
+                packages:
+                  yum:
+                  - awslogs
+                files:
+                - '/etc/awslogs/awslogs.conf'
+                - '/etc/awslogs/awscli.conf'
+              amazon-ssm-agent:
+                enabled: true
+                ensureRunning: true
+                packages:
+                  yum:
+                  - amazon-ssm-agent
+              postfix:
+                enabled: false
+                ensureRunning: false
+          commands:
+              worker-bootstrap:
+                command: "./tmp/hardening_bootstrap.sh --tcp-forwarding false --x11-forwarding false"
+    Properties:
+      AssociatePublicIpAddress: false
+      IamInstanceProfile: !Ref NodeInstanceProfile
+      ImageId: !FindInMap [NodeAmiRegionMap, !Ref "AWS::Region", AmiId]
+      InstanceType: !Ref NodeInstanceType
+      KeyName: !Ref KeyPairName
+      SecurityGroups:
+      - !Ref NodeSecurityGroup
+      UserData:
+        Fn::Base64: !Sub |
+            #!/bin/bash -xe
+            pip uninstall urllib3 -y
+            yum install -y awslogs
+            yum install -y amazon-ssm-agent
+            yum install -y amazon-efs-utils
+            /etc/eks/bootstrap.sh ${EKSClusterName}
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource NodeLaunchConfig --region ${AWS::Region}
+            sleep 30
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource NodeAutoScalingGroup --region ${AWS::Region}
+
+  EksHelperLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+                - events.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: EksHelperLambdaRoleLoggingPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+        - PolicyName: EksHelperLambdaRolePolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - eks:DescribeCluster
+                  - eks:DeleteCluster
+                Resource:
+                  - !Sub "arn:aws:eks:${AWS::Region}:${AWS::AccountId}:cluster/${EKSClusterName}"
+        - PolicyName: s3GetObjectPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource:
+                  - !Sub "arn:aws:s3:::${TemplateBucketName}"
+                  - !Sub "arn:aws:s3:::${TemplateBucketName}/${TemplateBucketKeyPrefix}/lambdas/eks-helper-lambda.zip"
+
+  EksHelperLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: !Ref TemplateBucketName
+        S3Key: !Sub "${TemplateBucketKeyPrefix}/lambdas/eks-helper-lambda.zip"
+      Handler: eksHelperLambda.handler
+      Role: !GetAtt EksHelperLambdaRole.Arn
+      Runtime: python2.7
+      Timeout: 60
+      Description: "A custom resource to manage EKS Cluster used for deploying ACS"
+
+  EksHelperLambdaCustomResource:
+    Type: Custom::EksHelper
+    DependsOn: BastionAutoScalingGroup
+    Properties:
+      ServiceToken: !GetAtt EksHelperLambda.Arn
+      EKSName: !Ref EKSClusterName
+
+  # SSM documents to run helm commands on the bastion
+
+  # Download scripts directory
+  HelmDownloadScript:
+    Type: "AWS::SSM::Document"
+    Properties:
+      Content:
+        schemaVersion: "2.2"
+        description: Download directory of helm helper scripts
+        mainSteps:
+          - action: aws:downloadContent
+            name: downloadHelmScriptsDirectory
+            inputs:
+              sourceType: "S3"
+              sourceInfo: !Sub "{ \"path\": \"https://${TemplateBucketName}.s3.amazonaws.com/${TemplateBucketKeyPrefix}/scripts\" }"
+              destinationPath: "/tmp"
+      DocumentType: Command
+
+  # Execute helm initialisation
+  HelmInitRunScript:
+    Type: "AWS::SSM::Document"
+    Properties:
+      Content:
+        schemaVersion: "2.2"
+        description: Execute helm init script to deploy tiller
+        mainSteps:
+          - action: aws:runShellScript
+            name: helmInit
+            inputs:
+              workingDirectory: "/root"
+              runCommand:
+                - "chmod u+x /tmp/helmInit.sh"
+                - "/tmp/helmInit.sh"
+              timeoutSeconds: 300
+      DocumentType: Command
+
+  # Execute helm install fluentd
+  HelmInstallFluentdRunScript:
+    Type: "AWS::SSM::Document"
+    Properties:
+      Content:
+        schemaVersion: "2.2"
+        description: Install Fluentd K8s CloudWatchLogs Helm chart
+        mainSteps:
+          - action: aws:runShellScript
+            name: helmInstallFluentd
+            inputs:
+              workingDirectory: "/root"
+              runCommand:
+                - "chmod u+x /tmp/helmFluentd.sh"
+                - !Sub "/tmp/helmFluentd.sh\
+                  \ --releasename ${FluentdReleaseName}\
+                  \ --instance-role ${NodeInstanceRoleArn}\
+                  \ --region ${AWS::Region}\
+                  \ --loggroup ${EC2LogGroup}\
+                  \ --install"
+              timeoutSeconds: 90
+      DocumentType: Command
+
+  ClusterInitHelperLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+                - events.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: ClusterInitHelperLambdaRoleLoggingPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+        - PolicyName: CusterInitHelperLambdaRoleEc2Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeInstances
+                Resource: '*'
+        - PolicyName: ClusterInitHelperLambdaRoleSsmPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:DescribeDocument
+                  - ssm:SendCommand
+                  - ssm:GetCommandInvocation
+                Resource: '*'
+        - PolicyName: s3GetObjectPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource:
+                  - !Sub "arn:aws:s3:::${TemplateBucketName}"
+                  - !Sub "arn:aws:s3:::${TemplateBucketName}/${TemplateBucketKeyPrefix}/lambdas/cluster-init-helper-lambda.zip"
+
+  ClusterInitHelperLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: !Ref TemplateBucketName
+        S3Key: !Sub "${TemplateBucketKeyPrefix}/lambdas/cluster-init-helper-lambda.zip"
+      Handler: clusterInitHelperLambda.handler
+      Role: !GetAtt ClusterInitHelperLambdaRole.Arn
+      Runtime: python2.7
+      Timeout: 420
+      Description: "A custom resource to initialise the EKS cluster"
+
+  ClusterInitHelperLambdaCustomResource:
+    DependsOn: NodeAutoScalingGroup
+    Type: Custom::ClusterInitHelper
+    Properties:
+      ServiceToken: !GetAtt ClusterInitHelperLambda.Arn
+      EKSName: !Ref EKSClusterName
+      VPCID: !Ref VPCID
+      NodeSecurityGroup: !Ref NodeSecurityGroup
+      BastionAutoScalingGroup: !Ref BastionAutoScalingGroup
+      HelmDownloadScript: !Ref HelmDownloadScript
+      HelmInitRunScript: !Ref HelmInitRunScript
+      HelmInstallFluentdRunScript: !Ref HelmInstallFluentdRunScript
+
+Outputs:
+  SubstackName:
+    Description: The bastion stack name
+    Value: !Sub "${AWS::StackName}"
+  BastionSecurityGroup:
+    Description: The bastion security group id
+    Value: !Ref BastionSecurityGroup
+  BastionLaunchConfiguration:
+    Description: The bastion host launch config
+    Value: !Ref BastionLaunchConfiguration
+  BastionAutoScalingGroup:
+    Description: The Bastion host autoscaling group
+    Value: !Ref BastionAutoScalingGroup
+  BastionEIP:
+    Description: The Elastic IP of Bastion host
+    Value: !Ref BastionEIP
+  BastionInstanceProfile:
+    Description: IAM Instance profile of Bastion host
+    Value: !Ref BastionInstanceProfile
+  BastionInstanceRole:
+    Description: IAM Role of Bastion host
+    Value: !Ref BastionInstanceRole
+  ControlPlaneSecurityGroup:
+    Description: The ControlPlane security group id
+    Value: !Ref ControlPlaneSecurityGroup
+  EksClusterName:
+    Description: EKS Cluster name
+    Value: !Ref EKSClusterName
+  EksEndpoint:
+    Description: EKS Cluster endpoint
+    Value: !GetAtt EksHelperLambdaCustomResource.endpoint
+  EksCertAuthority:
+    Description: EKS Cluster endpoint certificate authority
+    Value: !GetAtt EksHelperLambdaCustomResource.certificateAuthority
+  EksServiceRoleArn:
+    Value: !GetAtt EKSServiceRole.Arn

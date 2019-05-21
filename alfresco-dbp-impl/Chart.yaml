@@ -1,0 +1,11 @@
+description: A Helm chart for the Alfresco Digital Business Platform
+home: https://www.alfresco.com/platform
+keywords:
+- alfresco
+- dbp
+- platform
+maintainers:
+- name: Alfresco Platform Services Team
+- name: Alex
+name: alfresco-dbp-impl
+version: 0.0.1

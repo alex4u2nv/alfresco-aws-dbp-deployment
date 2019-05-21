@@ -1,0 +1,9 @@
+dependencies:
+- name: postgresql
+  repository: https://kubernetes-charts.storage.googleapis.com/
+  version: 0.9.3
+- name: alfresco-infrastructure
+  repository: http://kubernetes-charts.alfresco.com/incubator
+  version: 2.0.0-SNAPSHOT
+digest: sha256:3d33cc0ab9dd9edf9c0c5a8136ffeb94ea20544055ce41ebd452c385ce6f82a1
+generated: 2018-12-18T15:07:48.921101427Z

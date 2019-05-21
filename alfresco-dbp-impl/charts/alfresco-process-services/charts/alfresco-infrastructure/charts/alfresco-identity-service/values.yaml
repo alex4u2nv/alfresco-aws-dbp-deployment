@@ -1,0 +1,43 @@
+ingress:
+  enabled: true
+  path: /auth
+  proxyBufferSize: "16k"
+
+ingressHostName: "your ingress dns name"
+
+client:
+  alfresco:
+    redirectUris: "[\"http://localhost*\"]"
+
+keycloak:
+  rbac:
+    create: false
+  keycloak:
+    image:
+      tag: 3.4.3.Final
+      pullPolicy: IfNotPresent
+    username: admin
+    password: admin
+    extraVolumes: |
+      - name: realm-secret
+        secret:
+          secretName: realm-secret
+    extraVolumeMounts: |
+      - name: realm-secret
+        mountPath: "/realm/"
+        readOnly: true
+    extraArgs: "-Dkeycloak.import=/realm/alfresco-realm.json"
+    persistence:
+      dbPassword: keycloak
+  postgresql:
+    nameOverride: postgresql-id
+    imageTag: "10.1"
+    persistence:
+      existingClaim: "alfresco-volume-claim"
+      subPath: "alfresco-identity-service/database-data"
+    resources:
+      requests:
+        memory: "250Mi"
+      limits:
+        memory: "500Mi"
+

@@ -1,0 +1,60 @@
+# Defines the deployment for the alfresco digital workspace app
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "digital-workspace.shortname" . }}
+  labels:
+    app: {{ template "digital-workspace.shortname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: digitalWorkspaceApplication
+spec:
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "digital-workspace.shortname" . }}
+        release: {{ .Release.Name }}
+        component: digitalWorkspaceApplication
+    spec:
+      {{- if .Values.registryPullSecrets }}
+      # only set this secret if a private docker registry variable is defined
+      imagePullSecrets:
+        - name: {{ .Values.registryPullSecrets }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.ACSURL }}
+          env:
+            - name: "ACSURL"
+              value: {{ .Values.ACSURL }}
+          {{- end }}
+          {{- if .Values.ingress.applicationBasePath }}
+          env:
+            - name: "BASEPATH"
+              value: {{ .Values.ingress.applicationBasePath }}
+          {{- end }}
+          ports:
+            - containerPort: {{ .Values.image.internalPort }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.image.internalPort }}
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.image.internalPort }}
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            failureThreshold: 1
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}

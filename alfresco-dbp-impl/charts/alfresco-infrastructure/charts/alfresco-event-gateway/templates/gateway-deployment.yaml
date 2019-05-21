@@ -1,0 +1,55 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "alfresco-event-gateway.fullname" . }}
+  labels:
+    app: {{ template "alfresco-event-gateway.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "alfresco-event-gateway.fullname" . }}
+        release: {{ .Release.Name }}
+    spec:
+      imagePullSecrets:
+        - name: {{ .Values.registryPullSecrets }}
+      containers:
+        - name: {{ .Chart.Name }}-gateway
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+          - name: MESSAGING_FROM_ACTIVEMQ_HOST
+            value: "{{ .Values.messaging.from.activemq.host | default (printf "%s-activemq-broker" .Release.Name) }}"
+          - name: MESSAGING_FROM_ACTIVEMQ_PORT
+            value: "{{ .Values.messaging.from.activemq.port | default 5672 }}"
+          - name: MESSAGING_TO_ACTIVEMQ_HOST
+            value: "{{ .Values.messaging.to.activemq.host | default (printf "%s-activemq-broker" .Release.Name) }}"
+          - name: MESSAGING_TO_ACTIVEMQ_PORT
+            value: "{{ .Values.messaging.to.activemq.port | default 5672 }}"
+          - name: MESSAGING_EXTERNAL_HOST
+            value: "{{ .Values.messaging.external.host | default "localhost" }}"
+          - name: MESSAGING_EXTERNAL_PORT
+            value: "{{ .Values.messaging.external.port | default 5672 }}"
+          ports:
+            - containerPort: {{ .Values.image.internalPort }}
+          livenessProbe:
+            httpGet:
+              scheme: HTTP
+              path: /actuator/health
+              port: {{ .Values.image.internalPort }}
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              scheme: HTTP
+              path: /actuator/health
+              port: {{ .Values.image.internalPort }}
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 5
+          resources:
